@@ -47,6 +47,29 @@
 				return $('[name="' + String(name).replace(/["\\]/g, '\\$&') + '"]');
 			}
 
+			/**
+			 * Enable or disable every field this set writes to.
+			 *
+			 * Disabled on load, then re-enabled per component as a selection fills
+			 * it in. showAutocompleteError() re-enables the whole set instead: when
+			 * the widget never loads nothing will ever fill these in, and a
+			 * disabled input is not submitted, so leaving them disabled would make
+			 * manual entry save blank.
+			 *
+			 * Iterates destinationFields rather than componentForm: place_name is
+			 * a destination but is deliberately absent from componentForm (it is
+			 * read from place.displayName, not from addressComponents), and would
+			 * otherwise be left stuck disabled.
+			 */
+			function setDestinationFieldsDisabled(disabled) {
+				$.each(destinationFields, function(componentType, fieldName) {
+					byName(fieldName).prop('disabled', disabled);
+				});
+				// Unmapped lat/lng are '', and byName('') is an empty set — a no-op.
+				byName(latitudeFieldName).prop('disabled', disabled);
+				byName(longitudeFieldName).prop('disabled', disabled);
+			}
+
 			// Raw text the user typed into the search box, kept so the unit /
 			// apartment number can be recovered when Google omits it. See
 			// recoverUnitFromText().
@@ -75,17 +98,16 @@
 					return; // Field not on this form; do nothing.
 				}
 
-				// Set up component destination fields: assign IDs and disable them
+				// Set up component destination fields: assign the ids updateValue()
+				// looks them up by. Lat/lng get no googleSearch_* id — they are
+				// found by name instead.
 				$.each(destinationFields, function(componentType, fieldName) {
-					byName(fieldName)
-						.attr('id', autocompletePrefix + componentType)
-						.prop('disabled', true);
+					byName(fieldName).attr('id', autocompletePrefix + componentType);
 				});
 
-				// Lat/lng get no googleSearch_* id — they are found by name — but
-				// are disabled on load like every other destination field.
-				byName(latitudeFieldName).prop('disabled', true);
-				byName(longitudeFieldName).prop('disabled', true);
+				// Disable every destination field, lat/lng included, until a
+				// prediction is chosen or autocomplete fails to load.
+				setDestinationFieldsDisabled(true);
 
 				// Wrap original field and hide it; the PlaceAutocompleteElement will
 				// replace it visually. The wrapper is identified by CLASS, not id —
@@ -166,21 +188,70 @@
 					})
 					.catch(function(err) {
 						console.error(logPrefix + 'Failed to initialise.', err);
+						// initWithNewApi() runs inside this promise chain, so a throw
+						// AFTER the widget was inserted lands here too. In that case
+						// the widget is on the form and must be torn down — otherwise
+						// un-hiding $field would leave two address boxes stacked.
+						if (liveAutocomplete) {
+							degradeToManualEntry($field,
+								'Falling back to manual entry after the widget failed post-insertion: ' +
+								(err.message || 'unknown error'));
+							return;
+						}
 						showAutocompleteError($field, err.message || 'Could not load Google Maps.');
 					});
 			}
 
+			// Set once the widget has been given up on, so the degrade path runs at
+			// most once however many times it is reached. gmp-error in particular
+			// can fire repeatedly, and a second run would stack another banner.
+			var autocompleteFailed = false;
+
+			// The live widget, once it is actually in the DOM — NOT merely
+			// constructed. Failure handling has to tell those apart: a widget that
+			// was inserted has to be torn down and may hold typed text, whereas one
+			// that never got that far leaves nothing behind to clean up.
+			var liveAutocomplete = null;
+
+			// Shown when the API never loaded at all — the usual cause is a blocked
+			// request, which reloading after allow-listing does fix.
+			var LOAD_FAILURE_MESSAGE =
+				'&#9888; Address autocomplete could not load. ' +
+				'If you have an ad blocker, please allow <b>googleapis.com</b> and reload. ' +
+				'You can still type the address manually.';
+
+			// Shown when Google loaded but denied the request. Deliberately does NOT
+			// mention ad blockers or reloading: the cause is server-side (API key,
+			// billing, referrer restriction, an invalid filter value) and reloading
+			// would only send the participant chasing a browser problem they do not
+			// have.
+			var REQUEST_DENIED_MESSAGE =
+				'&#9888; Address suggestions are unavailable right now. ' +
+				'Please type your address manually.';
+
 			/**
-			 * Show a user-visible warning on the form when autocomplete cannot load.
+			 * Degrade to plain manual entry and tell the participant.
+			 *
+			 * Every failure path reaches here — the missing PlaceAutocompleteElement
+			 * branch, the load/timeout catch in initAutocomplete(), and the
+			 * gmp-error rejection — so the handling lives in this one place. The
+			 * participant-facing message varies by cause and is passed in; `detail`
+			 * is developer-facing and only ever goes to the console.
 			 */
-			function showAutocompleteError($field, detail) {
+			function showAutocompleteError($field, detail, message) {
+				if (autocompleteFailed) { return; }
+				autocompleteFailed = true;
+
 				$field.show(); // un-hide the original text input so the user can still type
 				$field.attr('placeholder', 'Address autocomplete unavailable — type manually');
+
+				// Nothing will ever fill these in now, so hand them back to the
+				// participant. Without this they stay disabled, and a disabled
+				// input is not submitted — manual entry would silently save blank.
+				setDestinationFieldsDisabled(false);
 				$field.closest('.gaa-location-field').prepend(
 					'<div style="color:#c00;font-size:12px;margin-bottom:4px;">' +
-					'&#9888; Address autocomplete could not load. ' +
-					'If you have an ad blocker, please allow <b>googleapis.com</b> and reload. ' +
-					'You can still type the address manually.' +
+					(message || LOAD_FAILURE_MESSAGE) +
 					'</div>'
 				);
 				console.warn(logPrefix + detail);
@@ -226,13 +297,28 @@
 				placeAutocomplete.id = autocompletePrefix + 'autocomplete';
 				placeAutocomplete.setAttribute('placeholder', 'Enter your address here');
 
-				// Surface backend rejections (bad API key, invalid filter value)
+				// Backend rejection (bad API key, billing off, referrer restriction,
+				// an invalid filter value). Documented as "fired when a backend
+				// request is denied", so it is a hard failure rather than an
+				// ordinary no-results signal — the widget will not recover on its
+				// own, and every keystroke from here on is silently discarded.
+				//
+				// Without this teardown the failure is INVISIBLE and total: the
+				// widget stays on the form looking usable, gmp-select never fires,
+				// so nothing is ever written to the source field and the
+				// destination fields stay disabled. The participant fills the form
+				// in and saves nothing at all.
 				placeAutocomplete.addEventListener('gmp-error', function(e) {
 					console.error(logPrefix + 'Google rejected the request. Check the API key and any prediction filter values.', e);
+					degradeToManualEntry($field,
+						'Falling back to manual entry after Google denied the request.');
 				});
 
-				// Insert the new element into the wrapper, before the hidden original field
+				// Insert the new element into the wrapper, before the hidden original
+				// field. Recorded as live from this point on: anything that fails
+				// after this must tear the widget down, not just un-hide $field.
 				$field.before(placeAutocomplete);
+				liveAutocomplete = placeAutocomplete;
 
 				// Disclose the transfer to Google now that the widget is really live.
 				addPrivacyNotice($field);
@@ -277,6 +363,58 @@
 					}
 					fillInAddress(place, $field);
 				});
+			}
+
+			/**
+			 * Retire a widget that made it onto the form but cannot be used, handing
+			 * the form back to the participant as plain manual entry.
+			 *
+			 * Two callers, both with a widget already inserted: the gmp-error
+			 * rejection, and a throw from initWithNewApi() after insertion. Unlike
+			 * the never-loaded paths there is live state to deal with — a widget in
+			 * the DOM, and text the participant has typed into it that exists
+			 * NOWHERE else — so both are handled before the shared degrade path runs.
+			 *
+			 * The privacy notice is deliberately left in place. Requests may already
+			 * have gone to Google, so the disclosure is still accurate —
+			 * addPrivacyNotice()'s reasoning about "nothing was sent" covers the
+			 * never-loaded case, which is not this one.
+			 */
+			function degradeToManualEntry($field, detail) {
+				// GUARD ONLY — do not set autocompleteFailed here. The flag is set
+				// by showAutocompleteError() at the end of this function; setting it
+				// up front would make that call early-return, and the whole degrade
+				// would silently do nothing.
+				if (autocompleteFailed) { return; }
+
+				var placeAutocomplete = liveAutocomplete;
+
+				// Rescue whatever the participant typed. It only exists inside the
+				// widget: $field is written on the gmp-select path, which never
+				// ran. Do not overwrite a formatted address left by an earlier
+				// successful selection.
+				var typed = '';
+				try {
+					typed = (placeAutocomplete && placeAutocomplete.value) || lastTypedText || '';
+				} catch (e) {
+					typed = lastTypedText || '';
+				}
+				if (typed && !$field.val()) {
+					$field.val(typed);
+					$field.change();
+				}
+
+				// Remove rather than hide, so the dead widget cannot sit above the
+				// text input as a second address box, and so its input/gmp-select
+				// listeners cannot fire on an element that is no longer in play.
+				try {
+					if (placeAutocomplete) { placeAutocomplete.remove(); }
+				} catch (e) {
+					console.warn(logPrefix + 'Could not remove the autocomplete widget.', e);
+				}
+				liveAutocomplete = null;
+
+				showAutocompleteError($field, detail, REQUEST_DENIED_MESSAGE);
 			}
 
 			/**
@@ -346,7 +484,7 @@
 							if (optionsWithMatchingContent.length === 1) {
 								optionsWithMatchingContent.prop('selected', true);
 							} else {
-								alert("The value '" + value + "' is not a valid value for the '" + eleName + "' field.");
+								console.warn(logPrefix + "The value '" + value + "' is not a valid value for the '" + eleName + "' field; leaving it blank.");
 								$('#'+id+' option[value=""]').prop('selected', true);
 							}
 						}
@@ -483,9 +621,16 @@
 			 * Uses the NEW Places API property names: addressComponents[].longText / shortText.
 			 */
 			function fillInAddress(place, $field) {
-				// Clear all component fields first
+				// Clear all component fields first. Enable as well as clear: the
+				// fields start disabled and are only re-enabled per component as a
+				// selection fills them in, so a component absent from the NEW place
+				// would keep its old value. A disabled input is not submitted, so on
+				// an edit form REDCap would keep the value saved earlier and the
+				// clear would never reach the record.
 				for (var component in componentForm) {
 					updateValue(autocompletePrefix + component, '');
+					var clearedEl = document.getElementById(autocompletePrefix + component);
+					if (clearedEl) { clearedEl.disabled = false; }
 				}
 
 				if (place && place.addressComponents && place.addressComponents.length > 0) {
@@ -502,9 +647,22 @@
 					// Map each address component into the configured REDCap fields
 					for (var i = 0; i < place.addressComponents.length; i++) {
 						var comp = place.addressComponents[i];
+						// Same guard as extractUnitParts(): a component without types
+						// would throw on types[0], and that throw escapes the
+						// gmp-select try/catch — see the coercion note below.
+						if (!comp || !comp.types || !comp.types.length) { continue; }
 						var addressType = comp.types[0];
 						if (componentForm[addressType] && document.getElementById(autocompletePrefix + addressType)) {
-							var val = comp[componentForm[addressType]];   // 'shortText' or 'longText'
+							// Coerce before use. A component missing the requested text
+							// property would otherwise throw in the county branch below,
+							// and nothing catches it: this runs outside the try in the
+							// gmp-select handler, so the throw would abort the rest of
+							// the fill — unit recovery and the place name included.
+							// Coercing here rather than in the county branch also keeps
+							// undefined out of updateValue(), where it would land in the
+							// select branch as option[value="undefined"] and fall through
+							// to the "not a valid value" warning.
+							var val = String(comp[componentForm[addressType]] || '');   // 'shortText' or 'longText'
 							if (addressType === 'administrative_area_level_2') {
 								val = $.trim(val.replace('County', ''));
 							}

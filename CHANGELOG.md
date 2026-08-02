@@ -13,6 +13,15 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Changed
+
+- **An unmatched dropdown value now warns to the console instead of raising an `alert()`.** When a
+  Google component has no matching option in a REDCap select or radio field, `updateValue()` raised
+  a modal `alert()` — blocking the thread mid-fill, interrupting the participant, and doing so once
+  per unmatched field. It now logs through `console.warn(logPrefix + …)`, matching how every other
+  recoverable problem in the module reports. The recovery behaviour is unchanged: the field is
+  still set to its blank option.
+
 ### Fixed
 
 - **A malformed address component no longer aborts the fill.** The county branch of
@@ -21,7 +30,7 @@ releasing, rename the deployment directory and tag the commit to match the versi
   `gmp-select` handler, the throw took the rest of the fill with it, including unit recovery and
   the place name. Component values are now coerced with `String(... || '')` before use, which also
   keeps `undefined` out of `updateValue()` (where it reached the select branch as
-  `option[value="undefined"]` and triggered the "not a valid value" alert). The component `types`
+  `option[value="undefined"]` and triggered the "not a valid value" warning). The component `types`
   array is guarded the same way `extractUnitParts()` already guarded it.
 - **A place name no longer stays attached to a different address.** Selecting a named premises and
   then a plain street address left the earlier display name in the Place Name Field. Since

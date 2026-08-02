@@ -745,7 +745,7 @@ SCRIPT;
 							if (optionsWithMatchingContent.length === 1) {
 								optionsWithMatchingContent.prop('selected', true);
 							} else {
-								alert("The value '" + value + "' is not a valid value for the '" + eleName + "' field.");
+								console.warn(logPrefix + "The value '" + value + "' is not a valid value for the '" + eleName + "' field; leaving it blank.");
 								$('#'+id+' option[value=""]').prop('selected', true);
 							}
 						}
@@ -924,7 +924,7 @@ SCRIPT;
 							// Coercing here rather than in the county branch also keeps
 							// undefined out of updateValue(), where it would land in the
 							// select branch as option[value="undefined"] and fall through
-							// to the "not a valid value" alert.
+							// to the "not a valid value" warning.
 							var val = String(comp[componentForm[addressType]] || '');   // 'shortText' or 'longText'
 							if (addressType === 'administrative_area_level_2') {
 								val = $.trim(val.replace('County', ''));
