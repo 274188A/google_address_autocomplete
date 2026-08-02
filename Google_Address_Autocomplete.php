@@ -315,8 +315,9 @@ SCRIPT;
 			 * manual entry save blank.
 			 *
 			 * Iterates destinationFields rather than componentForm: place_name is
-			 * a destination but is deliberately absent from componentForm, and
-			 * would otherwise be left stuck disabled.
+			 * a destination but is deliberately absent from componentForm (it is
+			 * read from place.displayName, not from addressComponents), and would
+			 * otherwise be left stuck disabled.
 			 */
 			function setDestinationFieldsDisabled(disabled) {
 				$.each(destinationFields, function(componentType, fieldName) {
@@ -883,9 +884,16 @@ SCRIPT;
 			 * Uses the NEW Places API property names: addressComponents[].longText / shortText.
 			 */
 			function fillInAddress(place, $field) {
-				// Clear all component fields first
+				// Clear all component fields first. Enable as well as clear: the
+				// fields start disabled and are only re-enabled per component as a
+				// selection fills them in, so a component absent from the NEW place
+				// would keep its old value. A disabled input is not submitted, so on
+				// an edit form REDCap would keep the value saved earlier and the
+				// clear would never reach the record.
 				for (var component in componentForm) {
 					updateValue(autocompletePrefix + component, '');
+					var clearedEl = document.getElementById(autocompletePrefix + component);
+					if (clearedEl) { clearedEl.disabled = false; }
 				}
 
 				if (place && place.addressComponents && place.addressComponents.length > 0) {
@@ -902,9 +910,22 @@ SCRIPT;
 					// Map each address component into the configured REDCap fields
 					for (var i = 0; i < place.addressComponents.length; i++) {
 						var comp = place.addressComponents[i];
+						// Same guard as extractUnitParts(): a component without types
+						// would throw on types[0], and that throw escapes the
+						// gmp-select try/catch — see the coercion note below.
+						if (!comp || !comp.types || !comp.types.length) { continue; }
 						var addressType = comp.types[0];
 						if (componentForm[addressType] && document.getElementById(autocompletePrefix + addressType)) {
-							var val = comp[componentForm[addressType]];   // 'shortText' or 'longText'
+							// Coerce before use. A component missing the requested text
+							// property would otherwise throw in the county branch below,
+							// and nothing catches it: this runs outside the try in the
+							// gmp-select handler, so the throw would abort the rest of
+							// the fill — unit recovery and the place name included.
+							// Coercing here rather than in the county branch also keeps
+							// undefined out of updateValue(), where it would land in the
+							// select branch as option[value="undefined"] and fall through
+							// to the "not a valid value" alert.
+							var val = String(comp[componentForm[addressType]] || '');   // 'shortText' or 'longText'
 							if (addressType === 'administrative_area_level_2') {
 								val = $.trim(val.replace('County', ''));
 							}
@@ -917,17 +938,34 @@ SCRIPT;
 					// the bare street number that loop just wrote.
 					applyUnitFromComponents(place.addressComponents, $field);
 					<?php echo ($set->placeName ? "
-					if (place.displayName) {
-						updateValue(autocompletePrefix + 'place_name', place.displayName);
-						document.getElementById(autocompletePrefix + 'place_name').disabled = false;
-					}" : ""); ?>
+					// place_name is not in componentForm, so the clear loop above does
+					// not reach it — clear and enable it explicitly, then refill. A
+					// conditional write would leave a name captured for an earlier
+					// selection attached to a DIFFERENT address, which is worse for the
+					// record than a blank field. The enable matters on edit forms: a
+					// disabled input is not submitted, so clearing alone would leave
+					// the previously saved name in REDCap.
+					var placeNameEl = document.getElementById(autocompletePrefix + 'place_name');
+					if (placeNameEl) {
+						updateValue(autocompletePrefix + 'place_name', '');
+						placeNameEl.disabled = false;
+						if (place.displayName) {
+							updateValue(autocompletePrefix + 'place_name', place.displayName);
+						}
+					}\n" : ""); ?>
 				} else {
 					// No place selected — clear the original field and lat/lng
 					$field.val('');
 					$field.change();
 					<?php echo ($set->latitude  ? "updateValue('latitude',  '');\n" : ""); ?>
 					<?php echo ($set->longitude ? "updateValue('longitude', '');\n" : ""); ?>
-					<?php echo ($set->placeName ? "updateValue(autocompletePrefix + 'place_name', '');\n" : ""); ?>
+					<?php echo ($set->placeName ? "
+					// Enable as well as clear, for the same submit reason as above.
+					var clearedPlaceNameEl = document.getElementById(autocompletePrefix + 'place_name');
+					if (clearedPlaceNameEl) {
+						updateValue(autocompletePrefix + 'place_name', '');
+						clearedPlaceNameEl.disabled = false;
+					}\n" : ""); ?>
 				}
 
 				if (typeof doBranching === 'function') { doBranching(); }

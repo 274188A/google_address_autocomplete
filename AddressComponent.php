@@ -54,10 +54,11 @@ enum AddressComponent: string
 	 * of the emitted componentForm map.
 	 *
 	 * Null means "not an address component at all": place_name is mapped from
-	 * place.displayName, not from addressComponents, so it must never appear in
-	 * componentForm. If it did, the clear loop in fillInAddress() would blank the
-	 * field on every selection while only refilling it when a display name exists
-	 * — silently wiping a field that previously kept its value.
+	 * place.displayName, not from addressComponents, so there is no component
+	 * property to read and it must never appear in componentForm — the fill loop
+	 * would find nothing to write. fillInAddress() clears, enables and refills it
+	 * explicitly instead, so that a name captured for one selection cannot stay
+	 * attached to a different address.
 	 */
 	public function format(): ?string
 	{

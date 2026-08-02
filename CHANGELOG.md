@@ -11,6 +11,30 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A malformed address component no longer aborts the fill.** The county branch of
+  `fillInAddress()` called `.replace()` on the raw component value, so a component missing the
+  requested `shortText` / `longText` threw — and because that loop runs outside the `try` in the
+  `gmp-select` handler, the throw took the rest of the fill with it, including unit recovery and
+  the place name. Component values are now coerced with `String(... || '')` before use, which also
+  keeps `undefined` out of `updateValue()` (where it reached the select branch as
+  `option[value="undefined"]` and triggered the "not a valid value" alert). The component `types`
+  array is guarded the same way `extractUnitParts()` already guarded it.
+- **A place name no longer stays attached to a different address.** Selecting a named premises and
+  then a plain street address left the earlier display name in the Place Name Field. Since
+  `place_name` is read from `place.displayName` rather than from `addressComponents`, it is not a
+  `componentForm` entry and the clear loop never reached it; it is now cleared and refilled
+  explicitly on every selection. A blank field is a visibly missing value, whereas a name bound to
+  the wrong address is a wrong record.
+- **Cleared fields now actually reach REDCap on edit forms.** Destination fields start disabled and
+  were only re-enabled for components present in the newly selected place. A disabled input is not
+  submitted, so on a record being edited, clearing a field that the new address does not supply —
+  a county, or the place name — left the previously saved value in the record. Fields are now
+  enabled as they are cleared.
+
 ## [1.0.0] - 2026-08-01
 
 First release of **Google Address Autocomplete**: a REDCap External Module that adds Google
