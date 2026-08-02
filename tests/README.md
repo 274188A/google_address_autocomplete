@@ -9,7 +9,7 @@ Two harnesses, neither needing a REDCap server:
 
 ```
 C:\tools\php85\php.exe tests/golden.php verify
-node --test "tests/*.test.mjs"
+node --test tests/unit.test.mjs
 ```
 
 Both exit non-zero on failure, so either works as a pre-commit gate. **Run both** — they cover
@@ -65,11 +65,16 @@ would not reveal.
 ## Unit tests
 
 ```
-node --test "tests/*.test.mjs"
+node --test tests/unit.test.mjs
 ```
 
-Node 18+, no dependencies and no `package.json` — `node:test` and `node:assert` are built in.
-Quote the glob: bare `node --test tests/` tries to execute the PHP files in this directory.
+No dependencies and no `package.json` — `node:test` and `node:assert` are built in. Verified on
+Node 24 in both PowerShell and Git Bash.
+
+Name the file explicitly rather than passing a directory: bare `node --test tests/` tries to
+execute the PHP files alongside it. A quoted glob (`node --test "tests/*.test.mjs"`) works too and
+is what you will want once there is a second test file, but glob arguments are a later Node
+addition, whereas the explicit path works anywhere `node:test` does.
 
 These cover `recoverUnitFromText()` and the `escapeRegExp()` it depends on: the unit-recovery
 parser, which is pure, regex-heavy, and the most intricate logic in the module. Everything the
@@ -86,6 +91,9 @@ naming the function, rather than silently testing nothing.
 The bare context provides no DOM, no jQuery and no globals, so only genuinely pure helpers can be
 tested this way; anything else throws on its first `document` reference. A function containing a
 `<?php ?>` block is rejected outright rather than tested in a mangled form.
+
+`extractUnitParts()` is the obvious next candidate — also pure, and it drops straight into this
+harness by adding its name to the `loadFunctions([...])` call.
 
 They are **characterisation** tests: they pin what the code does today so a refactor that changes
 behaviour fails here. They are not a specification. Two pinned behaviours are deliberate and worth
