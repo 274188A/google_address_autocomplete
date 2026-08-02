@@ -11,16 +11,17 @@
  * The functions are lifted out of Google_Address_Autocomplete.php at run time
  * (see extract.mjs) rather than copied, so they cannot drift from the source.
  * Scope is limited to helpers that touch neither the DOM nor jQuery, which
- * today means recoverUnitFromText() and the escapeRegExp() it depends on.
+ * today means recoverUnitFromText(), extractUnitParts(), and escapeRegExp().
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadFunctions } from './extract.mjs';
 
-const { recoverUnitFromText, escapeRegExp } = loadFunctions([
+const { recoverUnitFromText, escapeRegExp, extractUnitParts } = loadFunctions([
 	'escapeRegExp',
 	'recoverUnitFromText',
+	'extractUnitParts',
 ]);
 
 /** Shorthand: assert recoverUnitFromText(typed, streetNumber) === expected. */
@@ -112,4 +113,115 @@ test('escapeRegExp neutralises a street number containing metacharacters', () =>
 	assert.equal(escapeRegExp('a(b)'), 'a\\(b\\)');
 	// '.' is escaped, so it does not match the '7' in '27'.
 	unit('Unit 3, 27 Harris St', '2.', '');
+});
+
+/* ------------------------------------------------------------------ *
+ * extractUnitParts()
+ *
+ * Reads the unit and street number straight off the Places API component
+ * list. The NEW API names the value properties shortText / longText, so a
+ * fixture here doubles as a record of the shape the module expects back.
+ * ------------------------------------------------------------------ */
+
+/** Shorthand for a component: comp('subpremise', '3'). */
+function comp(type, shortText, extra) {
+	return Object.assign({ types: [type], shortText: shortText }, extra || {});
+}
+
+test('extractUnitParts reads the unit and street number off the components', () => {
+	assert.deepEqual(
+		extractUnitParts([comp('subpremise', '3'), comp('street_number', '27')]),
+		{ unit: '3', streetNumber: '27' }
+	);
+	assert.deepEqual(
+		extractUnitParts([comp('street_number', '27'), comp('subpremise', '3')]),
+		{ unit: '3', streetNumber: '27' },
+		'component order does not matter'
+	);
+});
+
+test('extractUnitParts prefers shortText and falls back to longText', () => {
+	assert.deepEqual(
+		extractUnitParts([{ types: ['subpremise'], longText: '3' }]),
+		{ unit: '3', streetNumber: '' },
+		'longText is used when shortText is absent'
+	);
+	assert.deepEqual(
+		extractUnitParts([{ types: ['subpremise'], shortText: 'S', longText: 'L' }]),
+		{ unit: 'S', streetNumber: '' },
+		'shortText wins when both are present'
+	);
+	assert.deepEqual(
+		extractUnitParts([{ types: ['subpremise'], shortText: '', longText: '7' }]),
+		{ unit: '7', streetNumber: '' },
+		'an empty shortText falls through to longText'
+	);
+});
+
+test('extractUnitParts keeps the first of a repeated component', () => {
+	assert.deepEqual(
+		extractUnitParts([comp('subpremise', '3'), comp('subpremise', '9')]),
+		{ unit: '3', streetNumber: '' }
+	);
+	assert.deepEqual(
+		extractUnitParts([comp('street_number', '27'), comp('street_number', '29')]),
+		{ unit: '', streetNumber: '27' }
+	);
+});
+
+test('extractUnitParts trims and coerces the value', () => {
+	assert.deepEqual(
+		extractUnitParts([comp('subpremise', '  3  ')]),
+		{ unit: '3', streetNumber: '' }
+	);
+	assert.deepEqual(
+		extractUnitParts([comp('street_number', 27)]),
+		{ unit: '', streetNumber: '27' },
+		'a non-string value is coerced rather than assumed'
+	);
+});
+
+test('extractUnitParts only looks at types[0]', () => {
+	// PINNED, AND ARGUABLY WRONG. The component type is read as types[0]
+	// rather than searched for across the array, so a subpremise listed
+	// second is missed entirely and unit recovery silently does not happen.
+	// Both call sites in the module do this (see also the componentForm loop
+	// in fillInAddress), so it is the module's convention rather than a local
+	// slip — which is why it is recorded here rather than quietly changed.
+	// If a real Google response is ever seen with the type in a later slot,
+	// this test is the thing that should change, deliberately.
+	assert.deepEqual(
+		extractUnitParts([{ types: ['premise', 'subpremise'], shortText: '3' }]),
+		{ unit: '', streetNumber: '' }
+	);
+});
+
+test('extractUnitParts returns blanks for absent or malformed input', () => {
+	const blank = { unit: '', streetNumber: '' };
+	assert.deepEqual(extractUnitParts([]), blank, 'empty list');
+	assert.deepEqual(extractUnitParts(null), blank, 'null');
+	assert.deepEqual(extractUnitParts(undefined), blank, 'undefined');
+	assert.deepEqual(extractUnitParts([comp('route', 'Harris St')]), blank, 'no relevant types');
+	assert.deepEqual(extractUnitParts([{ types: [], shortText: 'x' }]), blank, 'empty types array');
+});
+
+test('extractUnitParts skips a malformed entry without losing the rest', () => {
+	// The guard that matters: a null or types-less component must not abort
+	// the scan, or one bad entry costs the unit recovery for the whole place.
+	const expected = { unit: '', streetNumber: '27' };
+	assert.deepEqual(extractUnitParts([null, comp('street_number', '27')]), expected);
+	assert.deepEqual(extractUnitParts([{ shortText: 'x' }, comp('street_number', '27')]), expected);
+	assert.deepEqual(
+		extractUnitParts([undefined, comp('subpremise', '3'), comp('street_number', '27')]),
+		{ unit: '3', streetNumber: '27' }
+	);
+});
+
+test('extractUnitParts feeds recoverUnitFromText its street number', () => {
+	// The two are used together in applyUnitFromComponents(): the street
+	// number found here is what anchors the parse of the typed text when
+	// Google omits the subpremise. This pins the seam between them.
+	const parts = extractUnitParts([comp('street_number', '27'), comp('route', 'Harris St')]);
+	assert.equal(parts.unit, '', 'Google omitted the subpremise');
+	assert.equal(recoverUnitFromText('3/27 Harris St', parts.streetNumber), '3');
 });

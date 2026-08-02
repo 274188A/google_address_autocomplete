@@ -9,15 +9,15 @@
  * of it at test time.
  *
  * Only works for functions that are pure JavaScript: no PHP interpolation, no
- * DOM, no jQuery. recoverUnitFromText() and escapeRegExp() qualify. Anything
- * with a <?php ?> block inside its body will fail to parse, deliberately —
- * better a loud failure than a test that silently exercises mangled code.
+ * DOM, no jQuery. recoverUnitFromText(), extractUnitParts() and escapeRegExp()
+ * qualify. Anything with a <?php ?> block inside its body is rejected
+ * deliberately — better a loud failure than a test that silently exercises
+ * mangled code.
  */
 
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import vm from 'node:vm';
 
 const MODULE_PATH = join(dirname(fileURLToPath(import.meta.url)), '..', 'Google_Address_Autocomplete.php');
 
@@ -57,9 +57,16 @@ function extractFunction(source, name) {
 
 /**
  * Extract the named functions and evaluate them in a bare context, returning
- * the resulting callables. No DOM and no globals are provided: a function that
- * reaches for one will throw here, which is the signal that it does not belong
- * in this harness.
+ * the resulting callables.
+ *
+ * Evaluated in THIS realm, via indirect eval, rather than in a vm context.
+ * A vm context is a separate realm with its own Object.prototype, so objects
+ * built inside it (extractUnitParts() returns one) are not reference-equal to
+ * host-realm objects and assert.deepEqual rejects them as "same structure but
+ * not reference-equal" — a confusing failure that says nothing about the code
+ * under test. Node still provides no `document` or jQuery, so a function that
+ * reaches for one throws either way, which was the only property the vm
+ * context was actually buying.
  */
 export function loadFunctions(names) {
 	const source = readFileSync(MODULE_PATH, 'utf8');
@@ -73,10 +80,14 @@ export function loadFunctions(names) {
 		}
 	}
 
-	const context = vm.createContext({});
-	const script = defs.join('\n\n') + '\n\n({ ' + names.join(', ') + ' })';
+	// Indirect eval, so the definitions land in their own scope rather than
+	// leaking into this module's.
+	const indirectEval = eval;
+	const script = '(function () {\n'
+		+ defs.join('\n\n')
+		+ '\nreturn { ' + names.join(', ') + ' };\n})()';
 	try {
-		return vm.runInContext(script, context, { filename: 'extracted.js' });
+		return indirectEval(script);
 	} catch (err) {
 		throw new Error(`Extracted source did not parse: ${err.message}`);
 	}

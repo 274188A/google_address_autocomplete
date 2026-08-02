@@ -76,34 +76,44 @@ execute the PHP files alongside it. A quoted glob (`node --test "tests/*.test.mj
 is what you will want once there is a second test file, but glob arguments are a later Node
 addition, whereas the explicit path works anywhere `node:test` does.
 
-These cover `recoverUnitFromText()` and the `escapeRegExp()` it depends on: the unit-recovery
-parser, which is pure, regex-heavy, and the most intricate logic in the module. Everything the
-golden harness cannot reach, because the golden files only prove those regexes were *emitted*,
-never that they *work*.
+These cover the unit-recovery path — `recoverUnitFromText()`, `extractUnitParts()` and the
+`escapeRegExp()` they depend on — which is pure, regex-heavy, and the most intricate logic in the
+module. Everything the golden harness cannot reach, because the golden files only prove that code
+was *emitted*, never that it *works*.
 
 **The functions are extracted from `Google_Address_Autocomplete.php` at run time, not copied.**
-`extract.mjs` finds `function <name>(`, brace-matches to the end, and evaluates the result in a
-bare `vm` context. A copy pasted into the test file would drift from the source silently — the
-tests would keep passing while exercising code the module no longer ships. Extraction means
-editing the shipped function is what the tests respond to. Renaming it fails with a message
-naming the function, rather than silently testing nothing.
+`extract.mjs` finds `function <name>(`, brace-matches to the end, and evaluates the result. A copy
+pasted into the test file would drift from the source silently — the tests would keep passing while
+exercising code the module no longer ships. Extraction means editing the shipped function is what
+the tests respond to. Renaming it fails with a message naming the function, rather than silently
+testing nothing.
 
-The bare context provides no DOM, no jQuery and no globals, so only genuinely pure helpers can be
-tested this way; anything else throws on its first `document` reference. A function containing a
-`<?php ?>` block is rejected outright rather than tested in a mangled form.
+Adding another pure helper is a one-line change: put its name in the `loadFunctions([...])` call.
+Node provides no `document` and no jQuery, so a function that reaches for either throws on sight —
+which is the signal it needs a DOM harness instead of this one. A function containing a `<?php ?>`
+block is rejected outright rather than tested in a mangled form.
 
-`extractUnitParts()` is the obvious next candidate — also pure, and it drops straight into this
-harness by adding its name to the `loadFunctions([...])` call.
+The extracted code is evaluated in the test's own realm rather than a `node:vm` context, which is
+deliberate: a vm context has its own `Object.prototype`, so an object built inside it (as
+`extractUnitParts()` returns) is not reference-equal to a host object and `assert.deepEqual` fails
+it as "same structure but not reference-equal" — a confusing failure that says nothing about the
+code under test.
 
 They are **characterisation** tests: they pin what the code does today so a refactor that changes
-behaviour fails here. They are not a specification. Two pinned behaviours are deliberate and worth
-knowing about before you "fix" them:
+behaviour fails here. They are not a specification. Three pinned behaviours are worth knowing about
+before you "fix" them:
 
 - `recoverUnitFromText('7/27 Harris St', '7')` returns `''`. The street number must match on a word
   boundary, so `7` does not match inside `27`, and no unit is recovered even though the text plainly
   contains one. This is the guard that stops `27` being read as a unit working as intended.
 - A unit prefix longer than 24 characters is rejected as a building name. The fixture asserts its
   own length so that a miscount fails loudly instead of testing the wrong boundary.
+- **`extractUnitParts()` reads `types[0]` only**, so a component whose `subpremise` is listed second
+  (`types: ['premise', 'subpremise']`) is missed and unit recovery silently does not happen. This is
+  pinned as current behaviour rather than fixed: both places the module inspects a component type do
+  it this way (here and the `componentForm` loop in `fillInAddress()`), so it is a module-wide
+  convention and changing it is a behaviour change, not a test fix. If a real Google response is
+  ever seen with the type in a later slot, that test is what should change — deliberately.
 
 ## Scope
 

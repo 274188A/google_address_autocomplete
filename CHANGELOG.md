@@ -15,11 +15,14 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Added
 
-- **Unit tests for the unit-recovery parser.** `recoverUnitFromText()` and `escapeRegExp()` are now
-  covered by `tests/unit.test.mjs` (`node --test tests/unit.test.mjs`; no dependencies).
-  The golden harness proves those regexes are *emitted*, never that they *work*, so the most
-  intricate logic in the module sat in an untested layer. The functions are extracted from the PHP
-  source at run time rather than copied, so the tests cannot drift from the shipped code.
+- **Unit tests for the unit-recovery path.** `recoverUnitFromText()`, `extractUnitParts()` and
+  `escapeRegExp()` are now covered by `tests/unit.test.mjs` (`node --test tests/unit.test.mjs`; no
+  dependencies). The golden harness proves that code is *emitted*, never that it *works*, so the
+  most intricate logic in the module sat in an untested layer. The functions are extracted from the
+  PHP source at run time rather than copied, so the tests cannot drift from the shipped code.
+  Documented alongside them: `extractUnitParts()` inspects only `types[0]`, so a component listing
+  `subpremise` second is missed. That is pinned as current behaviour, not changed — the same
+  convention is used everywhere the module reads a component type.
 
 ### Changed
 
