@@ -13,6 +13,14 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Added
+
+- **Unit tests for the unit-recovery parser.** `recoverUnitFromText()` and `escapeRegExp()` are now
+  covered by `tests/unit.test.mjs` (`node --test "tests/*.test.mjs"`; Node 18+, no dependencies).
+  The golden harness proves those regexes are *emitted*, never that they *work*, so the most
+  intricate logic in the module sat in an untested layer. The functions are extracted from the PHP
+  source at run time rather than copied, so the tests cannot drift from the shipped code.
+
 ### Changed
 
 - **An unmatched dropdown value now warns to the console instead of raising an `alert()`.** When a
