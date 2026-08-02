@@ -1,0 +1,188 @@
+{
+	"name": "Google Address Autocomplete",
+
+	"namespace": "johnbarrett\\Google_Address_Autocomplete",
+
+	"description": "Adds Google Places address autocomplete to survey and data entry forms. As the participant types, predictions are offered and the selected address is split into the mapped fields (street number, street, city, state, postcode, country, coordinates). Several independent address field sets can be configured — for example the participant's home address on one instrument and their GP practice address on another. Optionally recovers unit/apartment numbers that Google omits for Australian and UK addresses. Requires a Google Maps API key with the Places API (New) enabled, and an https connection.",
+
+	"documentation": "README.md",
+
+	"framework-version": 16,
+
+	"compatibility": {
+		"php-version-min": "8.2.0"
+	},
+
+	"authors": [
+	  {
+		"name": "John Barrett",
+		"email": "john.barrett@curtin.edu.au",
+		"institution": "Curtin University"
+	  }
+	],
+
+	"project-settings": [
+		{
+			"key": "google-api-key",
+			"name": "Google API Key<br><span class='fs11'>One key is used for every address field set on this project.</span>",
+			"required": true,
+			"type": "text"
+		},
+		{
+			"key": "import-google-api",
+			"name": "Import Google API<br><span class='fs11'>Emits the Google Maps bootstrap loader. Disable only if another module on this project already loads the Google Maps API. The loader is emitted at most once per page regardless of how many address field sets are configured.</span>",
+			"required": false,
+			"type": "checkbox"
+		},
+		{
+			"key": "privacy-notice",
+			"name": "Privacy notice shown under the address box<br><span class='fs11'>What the participant types is sent to Google to generate the suggestions, so it must be disclosed to them. A short default notice is shown automatically; enter your own wording here to replace it. The same notice is shown under every address field set.</span>",
+			"required": false,
+			"type": "text"
+		},
+		{
+			"key": "hide-privacy-notice",
+			"name": "Hide the privacy notice<br><span class='fs11'>Suppresses the notice entirely. Tick this <b>only</b> if your participant information / consent form already discloses that addresses are sent to Google. Sending personal information to Google is a disclosure to a third party, and for Australian projects an overseas disclosure under APP 8.</span>",
+			"required": false,
+			"type": "checkbox"
+		},
+		{
+			"key": "address-set-intro",
+			"name": "<div style='margin-top:10px;padding-top:8px;border-top:1px solid #ccc;'><b>Address field sets</b><br><span class='fs11'>Each set is one address search box and the fields it populates. Add a set for each address the project captures — for example the participant's home address and their GP practice address. <b>Put each set on its own instrument</b> and name that instrument below: two search boxes on one page work, but they compete for the participant's attention and each one asks for location access separately.</span></div>",
+			"type": "descriptive"
+		},
+		{
+			"key": "address-set",
+			"name": "<span class='badge badge-primary' style='font-size:12px;'>Address Field Set</span>",
+			"required": false,
+			"type": "sub_settings",
+			"repeatable": true,
+			"sub_settings": [
+				{
+					"key": "set-description",
+					"name": "Name / description<br><span class='fs11'>Optional. For your own reference only, and shown in the browser console to identify this set when debugging.</span>",
+					"required": false,
+					"type": "text"
+				},
+				{
+					"key": "set-disabled",
+					"name": "Disable this address field set<br><span class='fs11'>Keeps the field mapping but stops the search box appearing.</span>",
+					"required": false,
+					"type": "checkbox"
+				},
+				{
+					"key": "set-form",
+					"name": "Instrument(s) this set applies to<br><span class='fs11'>Leave blank to apply to any form that contains the Autocomplete Field below. Naming the instrument means nothing at all is emitted on other pages.</span>",
+					"required": false,
+					"repeatable": true,
+					"type": "form-list"
+				},
+				{
+					"key": "set-fields-header",
+					"name": "<div class='blue text-center'>Address components</div>",
+					"type": "descriptive"
+				},
+				{
+					"key": "set-autocomplete",
+					"name": "Autocomplete Field (text only)<br><span class='fs11'>The field the search box attaches to. It is hidden on the form and receives the full formatted address.</span>",
+					"required": true,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-street-number",
+					"name": "Street Number Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-street",
+					"name": "Street Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-city",
+					"name": "City Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-county",
+					"name": "County Field<br><span class='fs11'>Leave blank for Australian projects: the council area would overwrite the suburb.</span>",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-state",
+					"name": "State Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-zip",
+					"name": "Zip Code Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-country",
+					"name": "Country Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-latitude",
+					"name": "Latitude Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-longitude",
+					"name": "Longitude Field",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-place-name",
+					"name": "Place Name Field<br><span class='fs11'>The name of the selected place, e.g. the medical centre's name.</span>",
+					"required": false,
+					"type": "field-list",
+					"autocomplete": true
+				},
+				{
+					"key": "set-options-header",
+					"name": "<div class='blue text-center'>Options for this set</div>",
+					"type": "descriptive"
+				},
+				{
+					"key": "set-recover-unit",
+					"name": "Recover unit/apartment number from typed text<br><span class='fs11'>Google often omits the <i>subpremise</i> component for Australian unit addresses, so <b>3/27 Harris St</b> is returned as street number <b>27</b> and the unit is lost. When enabled, the unit is parsed from what the user typed and prepended to the Street Number Field as <b>3/27</b>.<br>Requires <b>Street Number Field</b> to be mapped, and that field must have <b>no</b> integer/number validation.</span>",
+					"required": false,
+					"type": "checkbox"
+				},
+				{
+					"key": "set-region-codes",
+					"name": "Restrict predictions to region codes<br><span class='fs11'>Optional comma-separated CLDR region codes, e.g. <b>au</b> (maximum 15). Leave blank for no restriction.</span>",
+					"required": false,
+					"type": "text"
+				},
+				{
+					"key": "set-primary-types",
+					"name": "Restrict predictions to place types<br><span class='fs11'>Optional comma-separated Google place types from Place Type tables A and B, e.g. <b>street_address,premise,subpremise</b> (maximum 5). Leave blank for no restriction. Verify in the browser console that predictions still appear after setting this.</span>",
+					"required": false,
+					"type": "text"
+				}
+			]
+		}
+	]
+}

@@ -1,0 +1,11 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# The module class file is largely inline <script>/<style> templates that are
+# echoed verbatim, so its line endings become the line endings of the markup
+# REDCap serves. Pin the source to LF and the emitted output is byte-identical
+# no matter which platform the module was checked out on.
+*.php -text
+
+# Golden files are byte-compared against that output, so they must match it.
+tests/golden/*.html -text

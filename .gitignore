@@ -1,0 +1,32 @@
+# Hand-maintained for this module: PHP, JS and HTML, edited on Windows in
+# VS Code. There is no build system or package manager, so there are no build
+# outputs to ignore — only editor and OS scratch files, plus the two entries at
+# the bottom that are specific to this repository.
+
+# VS Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+
+# Visual Studio
+.vs/
+
+# Editor and OS scratch files
+*~
+~$*
+*.tmp
+*.log
+
+# Node, if a tool is ever run here
+node_modules/
+
+# Claude Code project instructions and local settings
+CLAUDE.md
+.claude/
+
+# Golden-harness scratch output, written on mismatch for diffing.
+tests/golden/*.actual

@@ -1,0 +1,802 @@
+<?php namespace johnbarrett\Google_Address_Autocomplete;
+
+use ExternalModules\AbstractExternalModule;
+
+// Required explicitly rather than relying on the framework. REDCap derives the
+// MAIN class file name from the namespace, but whether it autoloads additional
+// classes in that namespace is not documented — and a wrong guess is a fatal on
+// every survey page, so this does not rely on finding out.
+require_once __DIR__ . '/AddressComponent.php';
+require_once __DIR__ . '/AddressFieldSet.php';
+
+class Google_Address_Autocomplete extends AbstractExternalModule
+{
+	// Every value emitted into an inline <script> goes through json_encode with these
+	// flags. JSON_HEX_TAG is the one that matters most: it stops a "</script>" sequence
+	// inside any setting from closing the block early. The rest cover the quote
+	// characters, so the result is always a safe JS string literal.
+	private const JSON_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
+
+	// What the participant types is relayed to Google to generate the predictions, which
+	// has to be disclosed to them on the form rather than only to the project
+	// administrator in the README. The notice therefore shows by DEFAULT; an
+	// administrator can reword it, or suppress it only if their consent form already
+	// covers the disclosure.
+	private const DEFAULT_PRIVACY_NOTICE = 'Address suggestions come from Google. What you type in this box is sent to Google Maps to generate them.';
+
+	// Hook methods must be named exactly after the REDCap hook they implement. From
+	// framework version 12 onward these run automatically and config.json carries no
+	// "permissions" block; the legacy hook_* names no longer fire at all.
+	public function redcap_survey_page($project_id, $record, $instrument, $event_id, $group_id, $survey_hash, $response_id, $repeat_instance) {
+		$this->addAddressAutoCompletion($project_id, $instrument);
+	}
+
+	public function redcap_data_entry_form($project_id, $record, $instrument, $event_id, $group_id, $repeat_instance) {
+		$this->addAddressAutoCompletion($project_id, $instrument);
+	}
+
+	/**
+	 * Emit the widget for every address field set that applies to this page.
+	 *
+	 * The API key, the bootstrap loader and the privacy notice are project-wide and are
+	 * emitted at most ONCE. Everything else is per-set: each set gets its own IIFE, its
+	 * own element-id prefix, and its own copy of the behaviour. Two sets on one page
+	 * therefore share nothing but the Google Maps API itself.
+	 */
+	private function addAddressAutoCompletion($project_id, $instrument): void {
+		$key = $this->getProjectSetting('google-api-key', $project_id);
+		if (!$key) { return; }
+
+		$sets = $this->getActiveSets($project_id, $instrument);
+		if (!$sets) { return; }
+
+		if ($this->getProjectSetting('import-google-api', $project_id)) {
+			$this->emitBootstrapLoader($key);
+		}
+
+		$this->emitStyles();
+
+		$privacyNoticeText = $this->resolvePrivacyNotice($project_id);
+		foreach ($sets as $set) {
+			$this->emitSetScript($set, $privacyNoticeText);
+		}
+	}
+
+	/**
+	 * The configured address field sets that should run on this instrument.
+	 *
+	 * A misconfigured set is skipped and logged, never fatal: one bad set must not cost
+	 * the participant the other address boxes on the form.
+	 *
+	 * Note the defensive reads. Sub-settings are stored flat, one parallel array per
+	 * child key, so a child added to config.json after a project was configured simply
+	 * does not appear in the returned instance array — every child must be existence
+	 * checked rather than assumed.
+	 *
+	 * @return AddressFieldSet[]
+	 */
+	private function getActiveSets($project_id, $instrument): array {
+		$sets = $this->getSubSettings('address-set', $project_id);
+		if (!is_array($sets)) { return []; }
+
+		$active              = [];
+		$claimedSources      = [];
+		$claimedDestinations = [];
+
+		foreach ($sets as $index => $raw) {
+			if (!is_array($raw)) { continue; }
+
+			// The CONFIGURED position, not the position among the active sets, so a set's
+			// element ids stay the same no matter which other sets qualify on a page.
+			$set = AddressFieldSet::fromSubSetting($raw, $index);
+
+			if (!$set->isActive()) { continue; }
+
+			// Instrument scope. Blank means "any form containing the source field", which
+			// the client-side guard in the emitted IIFE still enforces.
+			if (!$set->appliesTo((string)$instrument)) { continue; }
+
+			// Two sets cannot share a source field: both would wrap and hide the same
+			// input, and only one widget could survive. Skip the later one.
+			$source = $set->sourceKey();
+			if (isset($claimedSources[$source])) {
+				$this->log(sprintf(
+					'Address Autocomplete: skipped set #%d on instrument "%s" because its '
+						. 'Autocomplete Field "%s" is already used by set #%d.',
+					$index + 1, $instrument, $source, $claimedSources[$source] + 1
+				));
+				continue;
+			}
+			$claimedSources[$source] = $index;
+
+			// A shared DESTINATION field is bad configuration but not fatal — the element
+			// simply ends up owned by whichever set writes last. Warn and carry on rather
+			// than silently dropping a set the administrator can see is configured.
+			foreach ($this->destinationFieldNames($set) as $fieldName) {
+				if (isset($claimedDestinations[$fieldName])) {
+					$this->log(sprintf(
+						'Address Autocomplete: set #%d and set #%d both write to field "%s" on '
+							. 'instrument "%s". One of them will overwrite the other.',
+						$index + 1, $claimedDestinations[$fieldName] + 1, $fieldName, $instrument
+					));
+				} else {
+					$claimedDestinations[$fieldName] = $index;
+				}
+			}
+
+			$active[] = $set;
+		}
+
+		return $active;
+	}
+
+	/**
+	 * Google component type => REDCap field name, for the set's mapped components.
+	 * Latitude and longitude are excluded; they are looked up by name.
+	 *
+	 * @return array<string,string>
+	 */
+	private function destinationFields(AddressFieldSet $set): array {
+		$fields = [];
+		foreach (AddressComponent::cases() as $component) {
+			$fieldName = $set->{$component->property()};
+			if ($fieldName !== '') { $fields[$component->value] = $fieldName; }
+		}
+		return $fields;
+	}
+
+	/**
+	 * Every REDCap field this set writes to, including latitude and longitude — used to
+	 * detect two sets fighting over one field.
+	 *
+	 * @return string[]
+	 */
+	private function destinationFieldNames(AddressFieldSet $set): array {
+		$names      = [];
+		$properties = array_map(
+			static fn(AddressComponent $component): string => $component->property(),
+			AddressComponent::cases()
+		);
+		// Lat/lng are not AddressComponent cases — they are looked up by field name
+		// rather than by googleSearch_* id — but they are still written to.
+		$properties = array_merge($properties, ['latitude', 'longitude']);
+
+		foreach ($properties as $property) {
+			$fieldName = $set->$property;
+			if ($fieldName !== '') { $names[$fieldName] = true; }
+		}
+		return array_keys($names);
+	}
+
+	/**
+	 * The disclosure shown under every widget. Empty string means "emit no notice".
+	 */
+	private function resolvePrivacyNotice($project_id): string {
+		if ($this->getProjectSetting('hide-privacy-notice', $project_id)) { return ''; }
+		$custom = trim((string)$this->getProjectSetting('privacy-notice', $project_id));
+		return ($custom !== '') ? $custom : self::DEFAULT_PRIVACY_NOTICE;
+	}
+
+	/**
+	 * Encode a single value as a JS literal. Never returns an empty string: emitting
+	 * "var x = ;" is a syntax error that kills the whole inline script, so json_encode()
+	 * failure falls back to an empty string literal.
+	 */
+	private function jsValue($value): string {
+		$json = json_encode((string)$value, self::JSON_FLAGS);
+		return ($json === false) ? '""' : $json;
+	}
+
+	/**
+	 * Turn a comma-separated setting into a JS array literal. Same contract as above —
+	 * json_encode() failure falls back to an empty array, never to "".
+	 */
+	private function jsArray($csv): string {
+		$parts = array_map(trim(...), explode(',', (string)$csv));
+		$parts = array_values(array_filter($parts, static fn(string $part): bool => $part !== ''));
+		$json  = json_encode($parts, self::JSON_FLAGS);
+		return ($json === false) ? '[]' : $json;
+	}
+
+	/**
+	 * Same contract again, falling back to an empty object.
+	 */
+	private function jsObject($map): string {
+		$json = json_encode((object)$map, self::JSON_FLAGS);
+		return ($json === false) ? '{}' : $json;
+	}
+
+	/**
+	 * Load Google Maps using the official inline bootstrap. This defines
+	 * google.maps.importLibrary immediately (synchronously) and defers the actual network
+	 * load until importLibrary() is called. It is safe even if another module has already
+	 * loaded the API, and is emitted at most once per page however many sets are active.
+	 */
+	private function emitBootstrapLoader($key): void {
+		// json_encode, NOT htmlspecialchars: this lands in a JavaScript string context,
+		// and HTML entities are not decoded inside <script>, so an html-escaped key would
+		// arrive at Google corrupted rather than safe. json_encode supplies the
+		// surrounding quotes itself.
+		$keyJs = $this->jsValue($key);
+
+		// The loader body is a nowdoc (<<<'SCRIPT') so PHP does NOT interpolate JS
+		// template literals like ${c} as PHP variables. A nowdoc cannot carry the key, so
+		// it arrives as an IIFE ARGUMENT rather than on a global. That matters: module
+		// JavaScript must not add anything to global scope, or it can collide with
+		// another module running on the same page. (The window.google namespace the
+		// loader creates is Google's own, not ours.)
+		echo '<script>(function(__addressAutoKey){';
+		echo <<<'SCRIPT'
+(g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({key:__addressAutoKey,v:"weekly"});
+SCRIPT;
+		echo '})(' . $keyJs . ');</script>';
+	}
+
+	/**
+	 * Styles for the wrapper each search box is placed in. Emitted once per page.
+	 *
+	 * These are keyed on a CLASS, never an id: a page can carry several wrappers, and a
+	 * repeated id is invalid HTML that would make the first match win every lookup.
+	 */
+	private function emitStyles(): void {
+		?>
+		<style>
+			.gaa-location-field { position: relative; }
+			.gaa-location-field gmp-place-autocomplete {
+				width: 100%;
+				font-size: 13px;
+			}
+			.gaa-location-field .gaa-privacy-notice {
+				font-size: 11px;
+				line-height: 1.4;
+				color: #666;
+				margin-top: 3px;
+			}
+		</style>
+		<?php
+	}
+
+	/**
+	 * Emit one self-contained IIFE for one address field set.
+	 *
+	 * Settings are baked in at emit time, not read at runtime, and optional features are
+	 * compiled out entirely — an unconfigured feature emits no code and cannot misfire.
+	 *
+	 * Nothing here may carry a fixed DOM id. Every id the script creates or looks up is
+	 * built from autocompletePrefix, which is unique to this set; that is the whole
+	 * mechanism by which two sets on one page stay out of each other's way.
+	 */
+	private function emitSetScript(AddressFieldSet $set, string $privacyNoticeText): void {
+		$destinationFields = $this->destinationFields($set);
+		?>
+		<script>
+		(function() {
+			// Unique to this address field set. Every element id the script assigns or
+			// looks up is built from it, which is what keeps two sets on one page from
+			// writing into each other's fields.
+			var autocompletePrefix = <?php echo $this->jsValue($set->elementPrefix()); ?>;
+			var autocompleteFieldName = <?php echo $this->jsValue($set->autocomplete); ?>;
+
+			// Console identity for this set. Purely diagnostic.
+			var logPrefix = '[Address Autocomplete ' + <?php echo $this->jsValue($set->label()); ?> + '] ';
+
+			// REDCap field names for the address components, keyed by Google
+			// component type. Emitted as one JSON object rather than interpolated
+			// into a selector per field, so no setting value ever lands in JS
+			// unescaped.
+			var destinationFields = <?php echo $this->jsObject($destinationFields); ?>;
+			var latitudeFieldName  = <?php echo $this->jsValue($set->latitude); ?>;
+			var longitudeFieldName = <?php echo $this->jsValue($set->longitude); ?>;
+
+			// Disclosure shown under the search box. Empty when the administrator has
+			// suppressed it. See addPrivacyNotice().
+			var privacyNoticeText = <?php echo $this->jsValue($privacyNoticeText); ?>;
+
+			/**
+			 * Look a field up by its REDCap name.
+			 *
+			 * The quote/backslash escape matters: a field name is interpolated into
+			 * an attribute-equals selector, where an unescaped quote would end the
+			 * selector string and throw a jQuery syntax error, taking the whole
+			 * IIFE down with it.
+			 */
+			function byName(name) {
+				if (!name) { return $(); }
+				return $('[name="' + String(name).replace(/["\\]/g, '\\$&') + '"]');
+			}
+
+			// Raw text the user typed into the search box, kept so the unit /
+			// apartment number can be recovered when Google omits it. See
+			// recoverUnitFromText().
+			var lastTypedText = '';
+
+			// Component mapping: Google address type -> format preference
+			//
+			// Do NOT add subpremise here. This object doubles as the registry of
+			// "which components have a destination field", and every entry is
+			// cleared through updateValue(autocompletePrefix + type) on each
+			// selection. No googleSearch_*subpremise element is ever created, so an
+			// entry here would only log "Could not find the element" every time.
+			// The unit is captured by extractUnitParts() instead.
+			// The keys are Google address component TYPE names; the values are the
+			// Place API property to read off the component.
+			var componentForm = {
+<?php foreach (AddressComponent::addressComponents() as $component): ?>
+				<?php echo ($set->{$component->property()} !== '' ? $component->value . ": '" . $component->format() . "'," : ""); ?>
+<?php endforeach; ?>
+			};
+
+			$(document).ready(function() {
+				// Guard — only proceed if this set's autocomplete target field exists
+				// on this particular instrument / form page. The set may also have
+				// been scoped to specific instruments server-side; this covers the
+				// case where it was not.
+				var $autocompleteField = byName(autocompleteFieldName);
+				if ($autocompleteField.length === 0) {
+					return; // Field not on this form; do nothing.
+				}
+
+				// Set up component destination fields: assign IDs and disable them
+				$.each(destinationFields, function(componentType, fieldName) {
+					byName(fieldName)
+						.attr('id', autocompletePrefix + componentType)
+						.prop('disabled', true);
+				});
+
+				// Lat/lng get no googleSearch_* id — they are found by name — but
+				// are disabled on load like every other destination field.
+				byName(latitudeFieldName).prop('disabled', true);
+				byName(longitudeFieldName).prop('disabled', true);
+
+				// Wrap original field and hide it; the PlaceAutocompleteElement will
+				// replace it visually. The wrapper is identified by CLASS, not id —
+				// several sets can be wrapped on one page.
+				$autocompleteField.wrap('<div class="gaa-location-field"></div>');
+				$autocompleteField.hide();
+
+				// Initialize the autocomplete once the Google Maps API is available
+				initAutocomplete($autocompleteField);
+			});
+
+			/**
+			 * Polls until google.maps.importLibrary exists, rejecting after the
+			 * timeout (default 15 s).
+			 *
+			 * The bootstrap loader defines importLibrary synchronously, so this
+			 * resolves immediately when "Import Google API" is enabled. The polling is
+			 * for the other case: another module supplies the API, possibly after
+			 * $(document).ready has already run.
+			 */
+			function waitForImportLibrary(timeoutMs) {
+				timeoutMs = timeoutMs || 15000;
+				return new Promise(function(resolve, reject) {
+					function ready() {
+						return typeof google !== 'undefined' && google.maps &&
+						       typeof google.maps.importLibrary === 'function';
+					}
+					if (ready()) { resolve(); return; }
+
+					var elapsed = 0;
+					var interval = 150;
+					var poll = setInterval(function() {
+						elapsed += interval;
+						if (ready()) {
+							clearInterval(poll);
+							resolve();
+						} else if (elapsed >= timeoutMs) {
+							clearInterval(poll);
+							reject(new Error(
+								'Google Maps did not become available within ' +
+								(timeoutMs / 1000) + 's. A browser extension (ad blocker) ' +
+								'may be blocking requests to googleapis.com.'
+							));
+						}
+					}, interval);
+				});
+			}
+
+			/**
+			 * Load the Places library. This is the only Google library the module
+			 * imports — see initWithNewApi() and applyGeolocationBias(), which are
+			 * deliberately written to need nothing from `maps` or `core`.
+			 */
+			function loadPlacesLibrary() {
+				return waitForImportLibrary().then(function() {
+					return google.maps.importLibrary('places');
+				});
+			}
+
+			/**
+			 * Initialise autocomplete on the given field using PlaceAutocompleteElement
+			 * (Places API New). If that class is absent the API key almost certainly
+			 * does not have Places API (New) enabled — show the error rather than
+			 * degrading to something that looks broken but reports nothing.
+			 */
+			function initAutocomplete($field) {
+				loadPlacesLibrary()
+					.then(function(placesLib) {
+						if (typeof placesLib.PlaceAutocompleteElement !== 'function') {
+							showAutocompleteError($field,
+								'PlaceAutocompleteElement is not available. Check that ' +
+								'Places API (New) is enabled for this API key.'
+							);
+							return;
+						}
+						console.log(logPrefix + 'Using Places API (New) — PlaceAutocompleteElement');
+						initWithNewApi(placesLib.PlaceAutocompleteElement, $field);
+					})
+					.catch(function(err) {
+						console.error(logPrefix + 'Failed to initialise.', err);
+						showAutocompleteError($field, err.message || 'Could not load Google Maps.');
+					});
+			}
+
+			/**
+			 * Show a user-visible warning on the form when autocomplete cannot load.
+			 */
+			function showAutocompleteError($field, detail) {
+				$field.show(); // un-hide the original text input so the user can still type
+				$field.attr('placeholder', 'Address autocomplete unavailable — type manually');
+				$field.closest('.gaa-location-field').prepend(
+					'<div style="color:#c00;font-size:12px;margin-bottom:4px;">' +
+					'&#9888; Address autocomplete could not load. ' +
+					'If you have an ad blocker, please allow <b>googleapis.com</b> and reload. ' +
+					'You can still type the address manually.' +
+					'</div>'
+				);
+				console.warn(logPrefix + detail);
+			}
+
+			/**
+			 * Disclose to the participant that what they type goes to Google.
+			 *
+			 * Called only from the success path in initWithNewApi(): if the widget
+			 * never loads, nothing is sent to Google and there is nothing to disclose.
+			 *
+			 * The text is inserted with .text(), not .html(), so administrator-supplied
+			 * wording is treated as text and can never inject markup — stronger than
+			 * escaping, since no HTML parsing happens at all.
+			 */
+			function addPrivacyNotice($field) {
+				if (!privacyNoticeText) { return; }
+				var $wrapper = $field.closest('.gaa-location-field');
+				if ($wrapper.find('.gaa-privacy-notice').length) { return; }
+				$('<div></div>')
+					.addClass('gaa-privacy-notice')
+					.text(privacyNoticeText)
+					.appendTo($wrapper);
+			}
+
+			/**
+			 * Build the PlaceAutocompleteElement and wire up its events.
+			 */
+			function initWithNewApi(PlaceAutocompleteElement, $field) {
+				// The prediction filters are assigned as properties inside try/catch so
+				// that a bad setting value degrades to unfiltered predictions instead of
+				// aborting initialisation and leaving a plain text input on the form.
+				var placeAutocomplete = new PlaceAutocompleteElement();
+				try {
+					var regionCodes  = <?php echo $this->jsArray($set->regionCodes); ?>;
+					var primaryTypes = <?php echo $this->jsArray($set->primaryTypes); ?>;
+					if (regionCodes.length)  { placeAutocomplete.includedRegionCodes  = regionCodes; }
+					if (primaryTypes.length) { placeAutocomplete.includedPrimaryTypes = primaryTypes; }
+				} catch (e) {
+					console.warn(logPrefix + 'Could not apply prediction filters; predictions will be unfiltered.', e);
+				}
+
+				placeAutocomplete.id = autocompletePrefix + 'autocomplete';
+				placeAutocomplete.setAttribute('placeholder', 'Enter your address here');
+
+				// Surface backend rejections (bad API key, invalid filter value)
+				placeAutocomplete.addEventListener('gmp-error', function(e) {
+					console.error(logPrefix + 'Google rejected the request. Check the API key and any prediction filter values.', e);
+				});
+
+				// Insert the new element into the wrapper, before the hidden original field
+				$field.before(placeAutocomplete);
+
+				// Disclose the transfer to Google now that the widget is really live.
+				addPrivacyNotice($field);
+
+				// Record what the user actually types, for unit recovery.
+				// The widget's shadow root is closed, but `input` events are composed
+				// so they cross it and retarget to the host element, and `value` is a
+				// documented public property. isTrusted filters out the value the
+				// widget writes back itself once a prediction is chosen.
+				placeAutocomplete.addEventListener('input', function(e) {
+					if (!e.isTrusted) { return; }
+					var typed = placeAutocomplete.value || '';
+					lastTypedText = typed;
+					// Emptying the box clears every destination field, so a cleared
+					// search can never leave the previous address behind.
+					if (typed === '') { fillInAddress(null, $field); }
+				});
+
+				// Apply geolocation bias to improve relevance
+				applyGeolocationBias(placeAutocomplete);
+
+				// The modern event is "gmp-select"; the event carries a placePrediction
+				// which must be converted to a Place via .toPlace(), then fetched.
+				placeAutocomplete.addEventListener('gmp-select', async function(event) {
+					var place = null;
+					try {
+						var prediction = event.placePrediction;
+						if (prediction && typeof prediction.toPlace === 'function') {
+							place = prediction.toPlace();
+						} else if (event.place) {
+							place = event.place;
+						}
+
+						if (place) {
+							await place.fetchFields({
+								fields: ['addressComponents', 'location', 'formattedAddress', 'displayName']
+							});
+						}
+					} catch (e) {
+						console.warn(logPrefix + 'Could not process place.', e);
+						place = null;
+					}
+					fillInAddress(place, $field);
+				});
+			}
+
+			/**
+			 * Bias the autocomplete results toward the user's current location.
+			 *
+			 * locationBias accepts a CircleLiteral ({center, radius}) directly, so no
+			 * google.maps.Circle is constructed. That matters: Circle belongs to the
+			 * `maps` library, which this module never imports, so referencing it here
+			 * would throw inside the geolocation callback where nothing catches it.
+			 */
+			function applyGeolocationBias(placeAutocomplete) {
+				if (!navigator.geolocation) { return; }
+				navigator.geolocation.getCurrentPosition(function(position) {
+					placeAutocomplete.locationBias = {
+						center: {
+							lat: position.coords.latitude,
+							lng: position.coords.longitude
+						},
+						radius: position.coords.accuracy
+					};
+				}, function(err) {
+					console.log(logPrefix + 'Geolocation unavailable; predictions will not be location-biased.', err);
+				});
+			}
+
+			/**
+			 * Helper: update a REDCap field value, handling radios, selects,
+			 * and rc-autocomplete dropdowns.
+			 */
+			function updateValue(id, value) {
+				if (id == 'latitude') {
+					var element = byName(latitudeFieldName);
+				}
+				else if (id == 'longitude') {
+					var element = byName(longitudeFieldName);
+				}
+				else {
+					var element = $('#' + id);
+				}
+
+				if (element.length === 0) {
+					console.log(logPrefix + 'Could not find the element with the following id:', id);
+					return;
+				}
+
+				var eleType = element.prop('type');
+				element.val(value);
+
+				// Handle special REDCap field types
+				var eleName = element.attr('name');
+				if (element.hasClass('hiddenradio')) {
+					$('input[name="'+eleName+'___radio"][value="'+value+'"]').prop('checked', true);
+				} else if (eleType.indexOf("select") >= 0) {
+					if ($('#'+id+' option[value="'+value+'"]').length > 0) {
+						$('#'+id+' option[value="'+value+'"]').prop('selected', true);
+					} else {
+						var valUnderscore = value.replace(/\s+/g,"_");
+						if ($('#'+id+' option[value="'+valUnderscore+'"]').length > 0) {
+							$('#'+id+' option[value="'+valUnderscore+'"]').prop('selected', true);
+						} else if ($('#'+id+' option[value="Other"]').length > 0) {
+							$('#'+id+' option[value="Other"]').prop('selected', true);
+						} else {
+							var optionsWithMatchingContent = $('#'+id+' option').filter(function(){
+								return $(this).html() === value;
+							});
+
+							if (optionsWithMatchingContent.length === 1) {
+								optionsWithMatchingContent.prop('selected', true);
+							} else {
+								alert("The value '" + value + "' is not a valid value for the '" + eleName + "' field.");
+								$('#'+id+' option[value=""]').prop('selected', true);
+							}
+						}
+					}
+				}
+
+				element.change();
+
+				if (element.hasClass('rc-autocomplete')) {
+					var autocompleteField = element.closest('td').find('.ui-autocomplete-input');
+					autocompleteField.val(element.find('option:selected').text());
+					autocompleteField.change();
+				}
+			}
+
+			/**
+			 * Pick the unit (subpremise) and street number out of the raw component
+			 * list, independently of componentForm — which has no subpremise entry
+			 * and would otherwise skip it.
+			 */
+			function extractUnitParts(components) {
+				var parts = { unit: '', streetNumber: '' };
+				if (!components || !components.length) { return parts; }
+				for (var i = 0; i < components.length; i++) {
+					var comp = components[i];
+					if (!comp || !comp.types) { continue; }
+					var type = comp.types[0];
+					var val  = comp.shortText || comp.longText || '';
+					if (type === 'subpremise' && !parts.unit) {
+						parts.unit = String(val).trim();
+					} else if (type === 'street_number' && !parts.streetNumber) {
+						parts.streetNumber = String(val).trim();
+					}
+				}
+				return parts;
+			}
+
+			function escapeRegExp(str) {
+				return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			}
+
+			/**
+			 * Recover the unit / apartment number from the text the user typed.
+			 *
+			 * Google frequently omits the subpremise component for AU/UK style unit
+			 * addresses: "3/27 Harris St" comes back as street number 27 with no
+			 * subpremise at all. This parses the unit out of the typed text, anchored
+			 * to the street number Google DID return, and returns '' rather than
+			 * guessing whenever the text does not clearly contain a unit.
+			 */
+			function recoverUnitFromText(typed, streetNumber) {
+				if (!typed || !streetNumber) { return ''; }
+				var text = String(typed).trim();
+				var sn   = String(streetNumber).trim();
+				if (!text || !sn) { return ''; }
+
+				// Locate the street number on a word boundary, so a street number of
+				// "7" is not matched inside "27".
+				var snMatch = new RegExp('(^|[^0-9A-Za-z])' + escapeRegExp(sn) + '(?![0-9A-Za-z])').exec(text);
+				if (!snMatch) { return ''; }
+
+				var snIndex = snMatch.index + snMatch[1].length;
+				if (snIndex <= 0) { return ''; }   // nothing precedes it, so no unit
+
+				var prefix = text.slice(0, snIndex);
+
+				// "27-29 Harris St" is a street number range, not a unit.
+				if (/[-–—]\s*$/.test(prefix)) { return ''; }
+
+				// A unit prefix is short; anything longer is a building or place name.
+				if (prefix.replace(/\s+/g, ' ').trim().length > 24) { return ''; }
+
+				// The prefix must END with a unit token, optionally introduced by a
+				// unit word and optionally followed by "/" or ",". That anchoring is
+				// what rejects "Harris St 27" and "The Old Rectory, 27 Harris St".
+				var unitMatch = /(?:^|[\s,])(?:(?:unit|apt|apartment|flat|suite|ste|shop|villa|lot|level|lvl|room|rm)\.?\s*)?([0-9]{1,5}[A-Za-z]?)\s*[\/,]?\s*$/i.exec(prefix);
+				return unitMatch ? unitMatch[1].toUpperCase() : '';
+			}
+
+			/**
+			 * Write "3/27" into the Street Number field.
+			 *
+			 * Goes through updateValue() so radios, selects and rc-autocomplete
+			 * dropdowns keep working, then re-enables the field — disabled inputs are
+			 * not submitted, so REDCap would otherwise never save the value.
+			 */
+			function applyUnitToStreetNumber(unit, streetNumber) {
+				var id = autocompletePrefix + 'street_number';
+				var el = document.getElementById(id);
+				if (!el || !unit || !streetNumber) { return; }
+				updateValue(id, unit + '/' + streetNumber);
+				el.disabled = false;
+			}
+
+			/**
+			 * Keep the full address stored in the search field consistent with the
+			 * components, by rewriting a leading bare street number to "3/27".
+			 * No-ops when Google supplied the subpremise, because formattedAddress
+			 * already contains the unit in that case.
+			 */
+			function patchFormattedAddress($field, unit, streetNumber) {
+				var current = $field.val();
+				if (!current || !unit || !streetNumber) { return; }
+				var leading = new RegExp('^\\s*' + escapeRegExp(streetNumber) + '(?![0-9A-Za-z])');
+				if (leading.test(current)) {
+					$field.val(current.replace(leading, unit + '/' + streetNumber));
+					$field.change();
+				}
+			}
+
+			/**
+			 * Apply the unit / sub-premise to the Street Number field. Called after the
+			 * components have been written, so that it overwrites the bare street
+			 * number they just stored.
+			 *
+			 * Does nothing unless a Street Number Field is mapped — that field is the
+			 * only destination for the unit.
+			 */
+			function applyUnitFromComponents(components, $field) {
+				var parts = extractUnitParts(components);
+				var unit  = parts.unit;
+				<?php if ($set->recoverUnit): ?>
+				// Google omitted subpremise — fall back to parsing the typed text.
+				if (!unit) { unit = recoverUnitFromText(lastTypedText, parts.streetNumber); }
+				<?php endif; ?>
+				lastTypedText = '';   // consume, so a later selection cannot reuse it
+
+				if (!unit || !parts.streetNumber) { return; }
+				if (!document.getElementById(autocompletePrefix + 'street_number')) { return; }
+				applyUnitToStreetNumber(unit, parts.streetNumber);
+				patchFormattedAddress($field, unit, parts.streetNumber);
+			}
+
+			/**
+			 * Populate (or clear) all address component fields from the selected Place.
+			 * Uses the NEW Places API property names: addressComponents[].longText / shortText.
+			 */
+			function fillInAddress(place, $field) {
+				// Clear all component fields first
+				for (var component in componentForm) {
+					updateValue(autocompletePrefix + component, '');
+				}
+
+				if (place && place.addressComponents && place.addressComponents.length > 0) {
+					// Write the full formatted address into the hidden original REDCap field
+					$field.val(place.formattedAddress || '');
+					$field.change();
+
+					// Latitude & Longitude
+					if (place.location) {
+						<?php echo ($set->latitude  ? "updateValue('latitude',  place.location.lat());\n" : ""); ?>
+						<?php echo ($set->longitude ? "updateValue('longitude', place.location.lng());\n" : ""); ?>
+					}
+
+					// Map each address component into the configured REDCap fields
+					for (var i = 0; i < place.addressComponents.length; i++) {
+						var comp = place.addressComponents[i];
+						var addressType = comp.types[0];
+						if (componentForm[addressType] && document.getElementById(autocompletePrefix + addressType)) {
+							var val = comp[componentForm[addressType]];   // 'shortText' or 'longText'
+							if (addressType === 'administrative_area_level_2') {
+								val = $.trim(val.replace('County', ''));
+							}
+							updateValue(autocompletePrefix + addressType, val);
+							document.getElementById(autocompletePrefix + addressType).disabled = false;
+						}
+					}
+
+					// Unit / sub-premise. Runs after the loop above so it overwrites
+					// the bare street number that loop just wrote.
+					applyUnitFromComponents(place.addressComponents, $field);
+					<?php echo ($set->placeName ? "
+					if (place.displayName) {
+						updateValue(autocompletePrefix + 'place_name', place.displayName);
+						document.getElementById(autocompletePrefix + 'place_name').disabled = false;
+					}" : ""); ?>
+				} else {
+					// No place selected — clear the original field and lat/lng
+					$field.val('');
+					$field.change();
+					<?php echo ($set->latitude  ? "updateValue('latitude',  '');\n" : ""); ?>
+					<?php echo ($set->longitude ? "updateValue('longitude', '');\n" : ""); ?>
+					<?php echo ($set->placeName ? "updateValue(autocompletePrefix + 'place_name', '');\n" : ""); ?>
+				}
+
+				if (typeof doBranching === 'function') { doBranching(); }
+			}
+		})();
+		</script>
+		<?php
+	}
+}
