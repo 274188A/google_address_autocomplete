@@ -21,8 +21,9 @@ releasing, rename the deployment directory and tag the commit to match the versi
   most intricate logic in the module sat in an untested layer. The functions are extracted from the
   PHP source at run time rather than copied, so the tests cannot drift from the shipped code.
   Documented alongside them: `extractUnitParts()` inspects only `types[0]`, so a component listing
-  `subpremise` second is missed. That is pinned as current behaviour, not changed — the same
-  convention is used everywhere the module reads a component type.
+  `subpremise` second is missed and the unit falls through to the typed-text recovery — recoverable
+  when Unit Recovery is enabled for the set, lost when it is not. That is pinned as current
+  behaviour, not changed: the same convention is used everywhere the module reads a component type.
 
 ### Changed
 

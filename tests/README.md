@@ -109,11 +109,14 @@ before you "fix" them:
 - A unit prefix longer than 24 characters is rejected as a building name. The fixture asserts its
   own length so that a miscount fails loudly instead of testing the wrong boundary.
 - **`extractUnitParts()` reads `types[0]` only**, so a component whose `subpremise` is listed second
-  (`types: ['premise', 'subpremise']`) is missed and unit recovery silently does not happen. This is
-  pinned as current behaviour rather than fixed: both places the module inspects a component type do
-  it this way (here and the `componentForm` loop in `fillInAddress()`), so it is a module-wide
-  convention and changing it is a behaviour change, not a test fix. If a real Google response is
-  ever seen with the type in a later slot, that test is what should change — deliberately.
+  (`types: ['premise', 'subpremise']`) is missed. The street number is still found, so the unit then
+  falls through to the typed-text recovery in `applyUnitFromComponents()` — which may still recover
+  it when Unit Recovery is enabled for the set, and recovers nothing when it is not. The exposure is
+  therefore sets with Unit Recovery off, not every unit address. This is pinned as current behaviour
+  rather than fixed: both places the module inspects a component type do it this way (here and the
+  `componentForm` loop in `fillInAddress()`), so it is a module-wide convention and changing it is a
+  behaviour change, not a test fix. If a real Google response is ever seen with the type in a later
+  slot, that test is what should change — deliberately.
 
 ## Scope
 

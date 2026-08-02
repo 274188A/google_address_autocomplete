@@ -184,7 +184,9 @@ test('extractUnitParts trims and coerces the value', () => {
 test('extractUnitParts only looks at types[0]', () => {
 	// PINNED, AND ARGUABLY WRONG. The component type is read as types[0]
 	// rather than searched for across the array, so a subpremise listed
-	// second is missed entirely and unit recovery silently does not happen.
+	// second is missed. The street number is still found, so the unit falls
+	// through to the typed-text recovery in applyUnitFromComponents() — still
+	// recoverable when Unit Recovery is on for the set, lost when it is off.
 	// Both call sites in the module do this (see also the componentForm loop
 	// in fillInAddress), so it is the module's convention rather than a local
 	// slip — which is why it is recorded here rather than quietly changed.
