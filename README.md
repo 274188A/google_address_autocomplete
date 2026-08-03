@@ -284,6 +284,11 @@ The typed text is consumed after each selection, so a later selection can never 
   geolocation prompt. Declining costs nothing but relevance.
 - **A privacy notice appears under the address box** disclosing that typed text goes to Google.
   See [Privacy](#privacy).
+- **If autocomplete fails while the participant is typing**, the box is replaced by a plain text
+  input containing what they had typed, under a red banner. On a record being edited, the address
+  component fields still hold the values saved last time — the module cannot know which of them the
+  half-typed address should replace, so it unlocks them rather than guessing. Check them before
+  saving.
 
 ## Securing your API key
 

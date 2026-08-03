@@ -15,6 +15,15 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Fixed
 
+- **A failure mid-typing no longer discards what the participant typed on an edit form.** When the
+  widget had to be retired, the typed text was rescued into the address field only if that field
+  was empty. On a record being edited it is not — it holds the address saved last time — so the
+  typed text went nowhere and the stale address was revealed instead, looking like the
+  participant's own entry. The rescue is now gated on whether the field holds an address *this
+  session's* autocomplete wrote, which is the only value worth protecting from a half-typed
+  fragment. The address component fields are deliberately left holding their previously saved
+  values: the module cannot know which of them the new address should replace, and they are
+  unlocked for correction as part of the degrade.
 - **Coordinates no longer stay attached to a different address.** The latitude and longitude writes
   sat inside `if (place.location)`, so selecting a place Google returns no location for left the
   previous address's coordinates in the fields — the same class of stale value as the place name,

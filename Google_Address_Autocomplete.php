@@ -333,6 +333,14 @@ SCRIPT;
 			// recoverUnitFromText().
 			var lastTypedText = '';
 
+			// Whether the address field currently holds a formatted address that
+			// THIS session's autocomplete wrote, rather than one saved against the
+			// record earlier. The degrade path needs the distinction: a value from
+			// a previous save is stale the moment the participant starts typing a
+			// new address, whereas one written by a selection this session is the
+			// good address and must not be replaced by a half-typed fragment.
+			var fieldHoldsSelectedAddress = false;
+
 			// Component mapping: Google address type -> format preference
 			//
 			// Do NOT add subpremise here. This object doubles as the registry of
@@ -652,15 +660,24 @@ SCRIPT;
 
 				// Rescue whatever the participant typed. It only exists inside the
 				// widget: $field is written on the gmp-select path, which never
-				// ran. Do not overwrite a formatted address left by an earlier
-				// successful selection.
+				// ran.
+				//
+				// The guard used to be "$field is empty". That held on a new form
+				// and failed on an edit form, where $field arrives pre-populated
+				// with the address saved last time: a failure mid-typing threw the
+				// typed text away and left the stale address on screen, looking
+				// like the participant's own entry. The question is not whether
+				// $field holds something, it is whether it holds something this
+				// session's autocomplete put there — which is the one case worth
+				// protecting, because a half-typed fragment is worse than a
+				// formatted address the participant already chose.
 				var typed = '';
 				try {
 					typed = (placeAutocomplete && placeAutocomplete.value) || lastTypedText || '';
 				} catch (e) {
 					typed = lastTypedText || '';
 				}
-				if (typed && !$field.val()) {
+				if (typed && !fieldHoldsSelectedAddress) {
 					$field.val(typed);
 					$field.change();
 				}
@@ -943,6 +960,9 @@ SCRIPT;
 					// Write the full formatted address into the hidden original REDCap field
 					$field.val(place.formattedAddress || '');
 					$field.change();
+					// A blank formatted address is nothing worth protecting from
+					// the degrade path, so record what actually landed.
+					fieldHoldsSelectedAddress = ($field.val() !== '');
 
 					// Latitude & Longitude. These are the only destinations looked
 					// up by name rather than by googleSearch_* id, which is how
@@ -1010,6 +1030,7 @@ SCRIPT;
 					// No place selected — clear the original field and lat/lng
 					$field.val('');
 					$field.change();
+					fieldHoldsSelectedAddress = false;
 					<?php echo ($set->latitude  ? "clearAndEnable('latitude');\n"  : ""); ?>
 					<?php echo ($set->longitude ? "clearAndEnable('longitude');\n" : ""); ?>
 					<?php echo ($set->placeName ? "
