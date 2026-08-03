@@ -19,6 +19,16 @@ releasing, rename the deployment directory and tag the commit to match the versi
   hook through to a chosen address landing in the mapped fields, with a diagram per phase. Linked
   from the README's Development section. Documentation only; no behaviour change.
 
+### Fixed
+
+- **The unit-recovery table in the README no longer misrepresents the word-boundary guard.** One
+  row paired the typed text `3/27 Harris St` with a street number of `7` — a pairing Google cannot
+  produce for that address — and presented the guard as a reason the parser recovers nothing. The
+  guard exists so the street number is located correctly when it appears inside a longer number,
+  which is now shown by `12/2 Smith St`: the unit `12` is recovered, where matching the `2` inside
+  `12` would have yielded `1`. Documentation only; the parser is unchanged and every row in the
+  table was re-verified against it.
+
 ## [1.0.1] - 2026-08-03
 
 A correctness release. Four of these are defects in how destination fields reach REDCap — most
