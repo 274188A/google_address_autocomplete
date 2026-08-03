@@ -949,6 +949,13 @@ SCRIPT;
 					// they came to be the two written without ever being enabled —
 					// so the coordinates were visible on the form and absent from
 					// every saved record.
+					//
+					// Cleared first, for the same reason place_name is: a selected
+					// place with no location must not leave the PREVIOUS address's
+					// coordinates behind, which is a wrong record rather than a
+					// visibly missing value.
+					<?php echo ($set->latitude  ? "clearAndEnable('latitude');\n"  : ""); ?>
+					<?php echo ($set->longitude ? "clearAndEnable('longitude');\n" : ""); ?>
 					if (place.location) {
 						<?php echo ($set->latitude  ? "updateAndEnable('latitude',  place.location.lat());\n" : ""); ?>
 						<?php echo ($set->longitude ? "updateAndEnable('longitude', place.location.lng());\n" : ""); ?>

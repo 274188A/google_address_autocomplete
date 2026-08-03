@@ -15,6 +15,11 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Fixed
 
+- **Coordinates no longer stay attached to a different address.** The latitude and longitude writes
+  sat inside `if (place.location)`, so selecting a place Google returns no location for left the
+  previous address's coordinates in the fields — the same class of stale value as the place name,
+  and a wrong record rather than a visibly missing one. They are now cleared before the write, like
+  every other destination.
 - **A fill no longer unlocks address fields it left blank.** Making cleared fields submit was done
   by enabling every mapped field on every selection, which also handed the participant every field
   the new address did not supply — after one selection the whole address was hand-editable, and the

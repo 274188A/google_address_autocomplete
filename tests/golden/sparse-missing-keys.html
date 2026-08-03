@@ -684,7 +684,12 @@
 					// they came to be the two written without ever being enabled —
 					// so the coordinates were visible on the form and absent from
 					// every saved record.
-					if (place.location) {
+					//
+					// Cleared first, for the same reason place_name is: a selected
+					// place with no location must not leave the PREVIOUS address's
+					// coordinates behind, which is a wrong record rather than a
+					// visibly missing value.
+															if (place.location) {
 																	}
 
 					// Map each address component into the configured REDCap fields
