@@ -15,6 +15,13 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Fixed
 
+- **A fill no longer unlocks address fields it left blank.** Making cleared fields submit was done
+  by enabling every mapped field on every selection, which also handed the participant every field
+  the new address did not supply — after one selection the whole address was hand-editable, and the
+  "disabled prevents manual edits" guard held only until then. A cleared field is now enabled only
+  when it actually held a value, which is the only case where the blank has to reach the record.
+  A field that was blank before the selection and after it stays locked. One limitation is
+  unchanged: a field enabled by one selection stays enabled for the rest of the page.
 - **Latitude and longitude are now saved.** They were disabled on page load along with every other
   destination field, but they are the only two written by field *name* rather than by
   `googleSearch_*` id, and the re-enable was missed on all four of their write sites. A disabled

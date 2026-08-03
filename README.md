@@ -264,10 +264,11 @@ The typed text is consumed after each selection, so a later selection can never 
 ## How it behaves on the form
 
 - **Destination fields are disabled on page load**, and each is re-enabled individually as a
-  selection writes to it — whether that write is a value or a blank. This stops participants
-  hand-editing the components and ensures REDCap only saves autocomplete-populated values.
-  Enabling on a blank matters as much as on a value: a disabled input is not submitted, so a
-  field left disabled would keep whatever was saved against the record earlier.
+  selection writes to it. This stops participants hand-editing the components and ensures REDCap
+  only saves autocomplete-populated values. A field is enabled when it receives a value, and also
+  when a blank has to overwrite something it already held — a disabled input is not submitted, so
+  a field left disabled would keep whatever was saved against the record earlier. A field that was
+  blank before the selection and is blank after it stays locked.
 - **A selection replaces the whole address, not just the parts it supplies.** Every mapped field
   is cleared before the newly selected place is written, so components the new address does not
   have — a county, or the place name for an address that is not a named premises — are blanked

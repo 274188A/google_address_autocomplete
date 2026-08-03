@@ -473,6 +473,29 @@
 			}
 
 			/**
+			 * Blank a field, enabling it ONLY if it actually held something.
+			 *
+			 * A blank has to reach the record only when it is overwriting a value
+			 * — on an edit form, the one saved last time. A field that was already
+			 * empty has nothing to submit, so it stays disabled and stays
+			 * uneditable, which is the entire point of loading the set disabled.
+			 * Enabling every mapped field on every fill made the whole address
+			 * hand-editable after one selection, quietly retiring that guard.
+			 *
+			 * Read BEFORE the clear, and read through .val(): that is the value
+			 * REDCap submits for all three kinds updateValue() handles — the
+			 * hidden input behind a .hiddenradio, the <select> behind an
+			 * .rc-autocomplete, and a plain text input. String(… || '') covers a
+			 * <select> with nothing selected, where .val() is null.
+			 */
+			function clearAndEnable(id) {
+				var element  = fieldElement(id);
+				var hadValue = element.length > 0 && String(element.val() || '') !== '';
+				updateValue(id, '');
+				if (hadValue) { element.prop('disabled', false); }
+			}
+
+			/**
 			 * Helper: update a REDCap field value, handling radios, selects,
 			 * and rc-autocomplete dropdowns.
 			 *
@@ -643,14 +666,12 @@
 			 * Uses the NEW Places API property names: addressComponents[].longText / shortText.
 			 */
 			function fillInAddress(place, $field) {
-				// Clear all component fields first. Enable as well as clear: the
-				// fields start disabled and are only re-enabled per component as a
-				// selection fills them in, so a component absent from the NEW place
-				// would keep its old value. A disabled input is not submitted, so on
-				// an edit form REDCap would keep the value saved earlier and the
-				// clear would never reach the record.
+				// Clear all component fields first: the fields are only filled per
+				// component as a selection supplies them, so a component absent
+				// from the NEW place would otherwise keep its old value. The
+				// enable is conditional — see clearAndEnable().
 				for (var component in componentForm) {
-					updateAndEnable(autocompletePrefix + component, '');
+					clearAndEnable(autocompletePrefix + component);
 				}
 
 				if (place && place.addressComponents && place.addressComponents.length > 0) {
