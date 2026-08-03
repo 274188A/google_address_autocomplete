@@ -15,13 +15,43 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Added
 
-- **`EXECUTION_FLOW.md`** — a phase-by-phase trace of how the module runs, from the REDCap page
-  hook through to a chosen address landing in the mapped fields, with a diagram per phase. Linked
-  from the README's Development section. Documentation only; no behaviour change.
+- **`docs/execution-flow.md`** — a phase-by-phase trace of how the module runs, from the REDCap
+  page hook through to a chosen address landing in the mapped fields, with a diagram per phase.
+  Linked from the README. Documentation only; no behaviour change.
+
+### Changed
+
+- **The documentation is split into a `docs/` set, and `README.md` is now a landing page.** The
+  README had grown to 467 lines serving four unrelated audiences in one scroll — installer,
+  project administrator, security/privacy sign-off, and maintainer — with several facts restated
+  three or four times. It now carries the description, requirements, quick start and a table of
+  where to go next; the detail moved to `docs/installation.md`, `docs/settings.md`,
+  `docs/fields-and-sets.md`, `docs/form-behaviour.md`, `docs/security-and-privacy.md`,
+  `docs/troubleshooting.md` and `docs/development.md`. `EXECUTION_FLOW.md` moved to
+  `docs/execution-flow.md` with it. No content was cut: each fact now has one home and is linked
+  from the places that previously repeated it, and the longest reference tables sit in
+  `<details>` blocks so a page opens short. The troubleshooting tables are deliberately left
+  uncollapsed — GitHub's in-page find does not match text inside a closed `<details>`.
+
+  One heading lost its leading emoji: `⚠️ Never map two settings to the same REDCap field`
+  became a plain heading with the warning in the body, because a leading emoji shifts GitHub's
+  generated anchor slug and broke the links pointing at it.
+
+  `config.json` still points **View Documentation** at `README.md`, so links out of the README
+  are absolute GitHub URLs (relative paths do not resolve in REDCap's viewer) and the README
+  carries no raw HTML. Documentation only; no behaviour change.
 
 ### Fixed
 
-- **The unit-recovery table in the README no longer misrepresents the word-boundary guard.** One
+- **The Development section no longer describes a test suite that hasn't existed for a while.**
+  It said tests were "a single PHP script"; there are two harnesses — `tests/golden.php` under
+  PHP and `tests/unit.test.mjs` under `node --test` — and it showed `php tests/golden.php`, where
+  `tests/README.md` records that PHP is not on the maintainer's `PATH`. `docs/development.md`
+  now documents both and defers to `tests/README.md`. Documentation only; the harnesses are
+  unchanged and both still pass.
+
+- **The unit-recovery table no longer misrepresents the word-boundary guard.** (The table lived
+  in `README.md` when this was fixed; it now sits in `docs/form-behaviour.md`.) One
   row paired the typed text `3/27 Harris St` with a street number of `7` — a pairing Google cannot
   produce for that address — and presented the guard as a reason the parser recovers nothing. The
   guard exists so the street number is located correctly when it appears inside a longer number,
