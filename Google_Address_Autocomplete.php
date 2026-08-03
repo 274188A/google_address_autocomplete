@@ -482,6 +482,25 @@ SCRIPT;
 			// that never got that far leaves nothing behind to clean up.
 			var liveAutocomplete = null;
 
+			// How many denied requests in a row to tolerate before giving up on
+			// the widget. A permanent cause — bad key, referrer restriction,
+			// billing off — denies every request, and requests go out per
+			// keystroke, so this is reached within about a second of typing and
+			// the participant is told almost as fast as before. What it buys is
+			// that a momentary denial no longer costs them autocomplete for the
+			// rest of the page.
+			var MAX_CONSECUTIVE_ERRORS = 3;
+
+			// Denials further apart than this are not the same burst. Without the
+			// window the count is "consecutive" in name only: gmp-select is the
+			// only other reset and it needs the participant to actually pick a
+			// prediction, so three unrelated blips minutes apart would add up to
+			// a degrade.
+			var ERROR_BURST_WINDOW_MS = 10000;
+
+			var consecutiveErrors = 0;
+			var lastErrorAt       = 0;
+
 			// Shown when the API never loaded at all — the usual cause is a blocked
 			// request, which reloading after allow-listing does fix.
 			var LOAD_FAILURE_MESSAGE =
@@ -567,20 +586,41 @@ SCRIPT;
 				placeAutocomplete.setAttribute('placeholder', 'Enter your address here');
 
 				// Backend rejection (bad API key, billing off, referrer restriction,
-				// an invalid filter value). Documented as "fired when a backend
-				// request is denied", so it is a hard failure rather than an
-				// ordinary no-results signal — the widget will not recover on its
-				// own, and every keystroke from here on is silently discarded.
+				// an invalid filter value, an exhausted quota, a transient 5xx).
 				//
-				// Without this teardown the failure is INVISIBLE and total: the
-				// widget stays on the form looking usable, gmp-select never fires,
-				// so nothing is ever written to the source field and the
-				// destination fields stay disabled. The participant fills the form
-				// in and saves nothing at all.
+				// The teardown below is what stops the failure being INVISIBLE and
+				// total: without it the widget stays on the form looking usable,
+				// gmp-select never fires, nothing is ever written to the source
+				// field and the destination fields stay disabled — the participant
+				// fills the form in and saves nothing at all.
+				//
+				// But it used to happen on the FIRST error, which made a momentary
+				// denial permanent: the widget was gone for the rest of the page
+				// even though the next request would have succeeded. So a short
+				// burst is tolerated first. The event carries no documented, stable
+				// indication of WHY the request was denied, so a permanent cause
+				// cannot be told from a transient one here — every error is counted
+				// the same way and the raw event is logged for whoever is
+				// debugging. Do NOT branch on a guessed detail property: a
+				// condition that is silently never true reads like working code
+				// forever.
 				placeAutocomplete.addEventListener('gmp-error', function(e) {
-					console.error(logPrefix + 'Google rejected the request. Check the API key and any prediction filter values.', e);
+					var now = Date.now();
+					if (now - lastErrorAt > ERROR_BURST_WINDOW_MS) { consecutiveErrors = 0; }
+					lastErrorAt = now;
+					consecutiveErrors++;
+
+					if (consecutiveErrors < MAX_CONSECUTIVE_ERRORS) {
+						console.warn(logPrefix + 'Google denied the request (' + consecutiveErrors +
+							' of ' + MAX_CONSECUTIVE_ERRORS + '); leaving the widget in place.', e);
+						return;
+					}
+
+					console.error(logPrefix + 'Google denied ' + consecutiveErrors +
+						' consecutive requests. Check the API key and any prediction filter values.', e);
 					degradeToManualEntry($field,
-						'Falling back to manual entry after Google denied the request.');
+						'Falling back to manual entry after Google denied ' +
+						consecutiveErrors + ' consecutive requests.');
 				});
 
 				// Insert the new element into the wrapper, before the hidden original
@@ -612,6 +652,15 @@ SCRIPT;
 				// The modern event is "gmp-select"; the event carries a placePrediction
 				// which must be converted to a Place via .toPlace(), then fetched.
 				placeAutocomplete.addEventListener('gmp-select', async function(event) {
+					// A prediction was served and chosen, so whatever denied the
+					// earlier requests has cleared. Reset before the fetch:
+					// fetchFields() failing is a different request's problem, and
+					// tying the reset to it would leave the count armed after a
+					// prediction request that demonstrably worked. Typing is not
+					// evidence Google answered, so the input listener does not
+					// reset it.
+					consecutiveErrors = 0;
+
 					var place = null;
 					try {
 						var prediction = event.placePrediction;

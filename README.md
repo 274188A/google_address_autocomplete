@@ -389,7 +389,7 @@ you tell two sets apart on the same page.
 
 | Symptom | Cause and fix |
 |---|---|
-| Widget appears but no predictions ever show | Usually **Restrict predictions to place types** is too narrow. Clear it and retest. Also check the console for `gmp-error`, which indicates Google rejected the request — bad key, billing disabled, an API restriction that omits Places API (New), a quota cap already reached, or a referrer restriction that excludes your REDCap host. See [Securing your API key](#securing-your-api-key). |
+| Widget appears but no predictions ever show | Usually **Restrict predictions to place types** is too narrow. Clear it and retest. Also check the console for `gmp-error`, which indicates Google rejected the request — bad key, billing disabled, an API restriction that omits Places API (New), a quota cap already reached, or a referrer restriction that excludes your REDCap host. Up to two consecutive denials are tolerated and appear as console **warnings** with the widget left in place, since a momentary denial should not cost the participant autocomplete for the whole page; the third within ten seconds retires the widget and shows the red banner. See [Securing your API key](#securing-your-api-key). |
 | Works for staff but not for survey participants | A referrer restriction that covers your internal REDCap hostname but not the public survey hostname. Add both. |
 
 **Wrong or missing values**

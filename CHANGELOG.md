@@ -13,6 +13,17 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Changed
+
+- **A single denied request no longer disables autocomplete for the rest of the page.** `gmp-error`
+  tore the widget down permanently on the first error, so a quota spike or a brief server-side
+  failure cost the participant autocomplete for the whole form even though the next request would
+  have succeeded. Up to two consecutive denials are now tolerated — logged as console warnings,
+  widget left in place — and the third within ten seconds degrades to manual entry as before. The
+  count resets on a successful selection, and denials further apart than the window are not treated
+  as the same burst. A permanent cause (bad key, referrer restriction, billing off) denies every
+  request and requests go out per keystroke, so it still degrades within about a second of typing.
+
 ### Fixed
 
 - **A failure mid-typing no longer discards what the participant typed on an edit form.** When the
