@@ -247,18 +247,19 @@ It returns nothing rather than guessing.
 | `Apt 3A/27 Harris St` | `27` | `3A` |
 | `Flat 12 27 Harris St` | `27` | `12` |
 | `Level 3, 27 Harris St` | `27` | `3` |
+| `12/2 Smith St` | `2` | `12` — the `2` inside `12` is not mistaken for the street number |
 | `27 Harris St` | `27` | *(none)* — nothing precedes the street number |
 | `Harris St 27` | `27` | *(none)* — the prefix is a street name, not a unit |
 | `27-29 Harris St` | `27` | *(none)* — a street number range, not a unit |
 | `The Old Rectory, 27 Harris St` | `27` | *(none)* — prefix does not end in a unit token |
 | `The Grand Old Rectory Flat 3, 27 Harris St` | `27` | *(none)* — prefix too long to be a unit |
-| `3/27 Harris St` | `7` | *(none)* — `7` is not matched inside `27` |
 
-Each of those negative cases corresponds to a guard in `recoverUnitFromText()`: the street number
-is matched on a word boundary, only the text *before* it is considered, that prefix is capped at
-24 characters, a trailing hyphen marks a range, and the prefix must *end* with a unit token —
-optionally introduced by `unit`, `apt`, `apartment`, `flat`, `suite`, `ste`, `shop`, `villa`,
-`lot`, `level`, `lvl`, `room` or `rm`.
+The street number is located on a word boundary, so it is never matched inside a longer number —
+that is what keeps the unit correct in the `12/2` case above. Each of the negative cases
+corresponds to a further guard in `recoverUnitFromText()`: only the text *before* the street
+number is considered, that prefix is capped at 24 characters, a trailing hyphen marks a range,
+and the prefix must *end* with a unit token — optionally introduced by `unit`, `apt`,
+`apartment`, `flat`, `suite`, `ste`, `shop`, `villa`, `lot`, `level`, `lvl`, `room` or `rm`.
 
 The typed text is consumed after each selection, so a later selection can never reuse a stale unit.
 
