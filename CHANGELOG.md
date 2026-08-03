@@ -13,50 +13,7 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
-### Added
-
-- **Unit tests for the unit-recovery path.** `recoverUnitFromText()`, `extractUnitParts()` and
-  `escapeRegExp()` are now covered by `tests/unit.test.mjs` (`node --test tests/unit.test.mjs`; no
-  dependencies). The golden harness proves that code is *emitted*, never that it *works*, so the
-  most intricate logic in the module sat in an untested layer. The functions are extracted from the
-  PHP source at run time rather than copied, so the tests cannot drift from the shipped code.
-  Documented alongside them: `extractUnitParts()` inspects only `types[0]`, so a component listing
-  `subpremise` second is missed and the unit falls through to the typed-text recovery — recoverable
-  when Unit Recovery is enabled for the set, lost when it is not. That is pinned as current
-  behaviour, not changed: the same convention is used everywhere the module reads a component type.
-
-### Changed
-
-- **An unmatched dropdown value now warns to the console instead of raising an `alert()`.** When a
-  Google component has no matching option in a REDCap select or radio field, `updateValue()` raised
-  a modal `alert()` — blocking the thread mid-fill, interrupting the participant, and doing so once
-  per unmatched field. It now logs through `console.warn(logPrefix + …)`, matching how every other
-  recoverable problem in the module reports. The recovery behaviour is unchanged: the field is
-  still set to its blank option.
-
-### Fixed
-
-- **A malformed address component no longer aborts the fill.** The county branch of
-  `fillInAddress()` called `.replace()` on the raw component value, so a component missing the
-  requested `shortText` / `longText` threw — and because that loop runs outside the `try` in the
-  `gmp-select` handler, the throw took the rest of the fill with it, including unit recovery and
-  the place name. Component values are now coerced with `String(... || '')` before use, which also
-  keeps `undefined` out of `updateValue()` (where it reached the select branch as
-  `option[value="undefined"]` and triggered the "not a valid value" warning). The component `types`
-  array is guarded the same way `extractUnitParts()` already guarded it.
-- **A place name no longer stays attached to a different address.** Selecting a named premises and
-  then a plain street address left the earlier display name in the Place Name Field. Since
-  `place_name` is read from `place.displayName` rather than from `addressComponents`, it is not a
-  `componentForm` entry and the clear loop never reached it; it is now cleared and refilled
-  explicitly on every selection. A blank field is a visibly missing value, whereas a name bound to
-  the wrong address is a wrong record.
-- **Cleared fields now actually reach REDCap on edit forms.** Destination fields start disabled and
-  were only re-enabled for components present in the newly selected place. A disabled input is not
-  submitted, so on a record being edited, clearing a field that the new address does not supply —
-  a county, or the place name — left the previously saved value in the record. Fields are now
-  enabled as they are cleared.
-
-## [1.0.0] - 2026-08-01
+## [1.0.0] - 2026-08-03
 
 First release of **Google Address Autocomplete**: a REDCap External Module that adds Google
 Places address autocomplete to survey and data entry forms, with support for multiple
@@ -110,8 +67,21 @@ than what changed. Later releases will record changes against this baseline.
 - Guards against the autocomplete field being absent from the current instrument, so the
   script no-ops instead of erroring on multi-instrument projects.
 - Clearing the search box clears every destination field, so a cleared search cannot leave the
-  previous address behind.
+  previous address behind. Selecting a second address clears the fields the new one does not
+  supply, including the Place Name Field — which is read from `place.displayName` rather than
+  from `addressComponents`, so it is cleared and refilled explicitly rather than through the
+  component loop. A name left bound to the wrong address would be a wrong record, where a blank
+  field is a visibly missing one.
+- Destination fields are enabled as they are cleared, not only as they are filled. They start
+  `disabled` so that only autocomplete-populated values are saved, and a disabled input is not
+  submitted — so on a record being edited, a cleared field has to be enabled for the clear to
+  reach REDCap at all.
 - REDCap's branching logic is re-evaluated (`doBranching()`) after any fill or clear.
+- **An unmatched dropdown value warns to the console rather than interrupting the participant.**
+  Where a Google component has no matching option in a REDCap select or radio field,
+  `updateValue()` sets the field to its blank option and reports through
+  `console.warn(logPrefix + …)`, matching how every other recoverable problem in the module
+  reports. A modal `alert()` would block the thread mid-fill, once per unmatched field.
 
 ### Requirements and behaviour
 
@@ -162,6 +132,12 @@ than what changed. Later releases will record changes against this baseline.
 - The eight address-component field names are emitted once as a single JSON object
   (`destinationFields`) and looked up through a `byName()` helper, which escapes quotes and
   backslashes for the attribute selector.
+- Address component values are coerced with `String(... || '')` and the component `types` array
+  is guarded before use, so a component missing the requested `shortText` / `longText` cannot
+  abort the fill. The component loop runs outside the `try` in the `gmp-select` handler, so a
+  throw there would otherwise take the rest of the fill with it — unit recovery and the place
+  name included. The coercion also keeps `undefined` out of `updateValue()`, where it would
+  reach the select branch as `option[value="undefined"]`.
 - A configured set is an `AddressFieldSet` readonly value object, built once at the boundary by
   `fromSubSetting()`. Sub-settings are stored flat, so a key added to `config.json` after a
   project was configured is simply absent — the factory's defensive reads exist for that case,
@@ -186,5 +162,15 @@ than what changed. Later releases will record changes against this baseline.
   Runs against a ~40-line stub of `AbstractExternalModule` implementing the three framework
   methods the module calls; log messages are captured alongside the markup, so a change that
   stops warning about a misconfigured set fails too. `php tests/golden.php verify`.
+- **Unit tests for the unit-recovery path** (`tests/unit.test.mjs`, `node --test
+  tests/unit.test.mjs`, no dependencies). `recoverUnitFromText()`, `extractUnitParts()` and the
+  `escapeRegExp()` they depend on are the most intricate logic in the module, and the golden
+  harness proves only that code was *emitted*, never that it *works*. The functions are extracted
+  from the PHP source at run time rather than copied, so the tests cannot drift from the shipped
+  code. Documented alongside them: `extractUnitParts()` inspects only `types[0]`, so a component
+  listing `subpremise` second is missed and the unit falls through to the typed-text recovery —
+  recoverable when Unit Recovery is enabled for the set, lost when it is not. That is pinned as
+  current behaviour rather than fixed, since the same convention is used everywhere the module
+  reads a component type.
 
 [1.0.0]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.0
