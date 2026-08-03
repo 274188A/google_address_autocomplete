@@ -13,6 +13,13 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-08-03
+
+A correctness release. Four of these are defects in how destination fields reach REDCap — most
+consequentially, latitude and longitude were never saved at all — and the fifth stops a momentary
+Google failure disabling autocomplete for the rest of the page. No settings changed, so upgrading
+needs no reconfiguration.
+
 ### Changed
 
 - **A single denied request no longer disables autocomplete for the rest of the page.** `gmp-error`
@@ -215,4 +222,5 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.1]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.1
 [1.0.0]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.0
