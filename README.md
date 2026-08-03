@@ -62,8 +62,9 @@ Not working? Go straight to [Troubleshooting](#troubleshooting).
 - [Troubleshooting](#troubleshooting)
 
 **About the project**
-- [Development](#development) · [AI-assisted development](#ai-assisted-development) ·
-  [Changelog](#changelog) · [License](#license)
+- [Development](#development) ·
+  [Execution flow](https://github.com/274188A/google_address_autocomplete/blob/main/EXECUTION_FLOW.md) ·
+  [AI-assisted development](#ai-assisted-development) · [Changelog](#changelog) · [License](#license)
 
 ---
 
@@ -405,6 +406,13 @@ you tell two sets apart on the same page.
 ## Development
 
 There is no build system or package manager. Tests are a single PHP script with no dependencies.
+
+[EXECUTION_FLOW.md](https://github.com/274188A/google_address_autocomplete/blob/main/EXECUTION_FLOW.md)
+traces a page render end to end — which address field sets are emitted server-side, how the Google
+widget is attached to the form, and what a selection writes where — with a diagram and its exit
+paths for each of the three phases. The link is absolute because this README is also rendered by
+REDCap's **View Documentation**, where a relative path would not resolve and the diagrams would not
+render.
 
 ### Golden-output harness
 

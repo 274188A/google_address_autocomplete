@@ -13,6 +13,12 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Added
+
+- **`EXECUTION_FLOW.md`** — a phase-by-phase trace of how the module runs, from the REDCap page
+  hook through to a chosen address landing in the mapped fields, with a diagram per phase. Linked
+  from the README's Development section. Documentation only; no behaviour change.
+
 ## [1.0.1] - 2026-08-03
 
 A correctness release. Four of these are defects in how destination fields reach REDCap — most
