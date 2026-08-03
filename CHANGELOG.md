@@ -13,6 +13,16 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Fixed
+
+- **Latitude and longitude are now saved.** They were disabled on page load along with every other
+  destination field, but they are the only two written by field *name* rather than by
+  `googleSearch_*` id, and the re-enable was missed on all four of their write sites. A disabled
+  input is not submitted, so the coordinates appeared on the form and reached no record — and on an
+  edit form the clear never reached the record either. Every write now goes through a single
+  `updateAndEnable()` helper, which resolves either kind of lookup, so a write that does not enable
+  is no longer something a caller can forget.
+
 ## [1.0.0] - 2026-08-03
 
 First release of **Google Address Autocomplete**: a REDCap External Module that adds Google

@@ -702,19 +702,45 @@ SCRIPT;
 			}
 
 			/**
+			 * Resolve an updateValue() id to the element it refers to.
+			 *
+			 * Latitude and longitude are the only two destinations with no
+			 * googleSearch_* id — they are looked up by field NAME instead, which
+			 * is exactly why they were the two the re-enable was missed on.
+			 * Resolving both kinds here is what lets updateAndEnable() work for
+			 * either without having to know which it was handed.
+			 */
+			function fieldElement(id) {
+				if (id === 'latitude')  { return byName(latitudeFieldName); }
+				if (id === 'longitude') { return byName(longitudeFieldName); }
+				return $('#' + id);
+			}
+
+			/**
+			 * Write a value and hand the field back to REDCap.
+			 *
+			 * Destination fields load disabled and a disabled input is not
+			 * submitted, so a write that does not also enable is a value the
+			 * participant can see and REDCap never receives. That is precisely
+			 * what happened to every coordinate this module has ever written.
+			 *
+			 * Enabling through jQuery rather than element.disabled is deliberate:
+			 * .prop() on an empty set is an inert no-op, so a field mapped in the
+			 * settings but absent from this instrument costs nothing here.
+			 */
+			function updateAndEnable(id, value) {
+				updateValue(id, value);
+				fieldElement(id).prop('disabled', false);
+			}
+
+			/**
 			 * Helper: update a REDCap field value, handling radios, selects,
 			 * and rc-autocomplete dropdowns.
+			 *
+			 * Does NOT enable the field — callers go through updateAndEnable().
 			 */
 			function updateValue(id, value) {
-				if (id == 'latitude') {
-					var element = byName(latitudeFieldName);
-				}
-				else if (id == 'longitude') {
-					var element = byName(longitudeFieldName);
-				}
-				else {
-					var element = $('#' + id);
-				}
+				var element = fieldElement(id);
 
 				if (element.length === 0) {
 					console.log(logPrefix + 'Could not find the element with the following id:', id);
@@ -828,16 +854,14 @@ SCRIPT;
 			/**
 			 * Write "3/27" into the Street Number field.
 			 *
-			 * Goes through updateValue() so radios, selects and rc-autocomplete
-			 * dropdowns keep working, then re-enables the field — disabled inputs are
-			 * not submitted, so REDCap would otherwise never save the value.
+			 * Goes through updateAndEnable() so radios, selects and rc-autocomplete
+			 * dropdowns keep working and the field is re-enabled — disabled inputs
+			 * are not submitted, so REDCap would otherwise never save the value.
 			 */
 			function applyUnitToStreetNumber(unit, streetNumber) {
 				var id = autocompletePrefix + 'street_number';
-				var el = document.getElementById(id);
-				if (!el || !unit || !streetNumber) { return; }
-				updateValue(id, unit + '/' + streetNumber);
-				el.disabled = false;
+				if (!document.getElementById(id) || !unit || !streetNumber) { return; }
+				updateAndEnable(id, unit + '/' + streetNumber);
 			}
 
 			/**
@@ -891,9 +915,7 @@ SCRIPT;
 				// an edit form REDCap would keep the value saved earlier and the
 				// clear would never reach the record.
 				for (var component in componentForm) {
-					updateValue(autocompletePrefix + component, '');
-					var clearedEl = document.getElementById(autocompletePrefix + component);
-					if (clearedEl) { clearedEl.disabled = false; }
+					updateAndEnable(autocompletePrefix + component, '');
 				}
 
 				if (place && place.addressComponents && place.addressComponents.length > 0) {
@@ -901,10 +923,14 @@ SCRIPT;
 					$field.val(place.formattedAddress || '');
 					$field.change();
 
-					// Latitude & Longitude
+					// Latitude & Longitude. These are the only destinations looked
+					// up by name rather than by googleSearch_* id, which is how
+					// they came to be the two written without ever being enabled —
+					// so the coordinates were visible on the form and absent from
+					// every saved record.
 					if (place.location) {
-						<?php echo ($set->latitude  ? "updateValue('latitude',  place.location.lat());\n" : ""); ?>
-						<?php echo ($set->longitude ? "updateValue('longitude', place.location.lng());\n" : ""); ?>
+						<?php echo ($set->latitude  ? "updateAndEnable('latitude',  place.location.lat());\n" : ""); ?>
+						<?php echo ($set->longitude ? "updateAndEnable('longitude', place.location.lng());\n" : ""); ?>
 					}
 
 					// Map each address component into the configured REDCap fields
@@ -929,8 +955,7 @@ SCRIPT;
 							if (addressType === 'administrative_area_level_2') {
 								val = $.trim(val.replace('County', ''));
 							}
-							updateValue(autocompletePrefix + addressType, val);
-							document.getElementById(autocompletePrefix + addressType).disabled = false;
+							updateAndEnable(autocompletePrefix + addressType, val);
 						}
 					}
 
@@ -945,26 +970,24 @@ SCRIPT;
 					// record than a blank field. The enable matters on edit forms: a
 					// disabled input is not submitted, so clearing alone would leave
 					// the previously saved name in REDCap.
-					var placeNameEl = document.getElementById(autocompletePrefix + 'place_name');
-					if (placeNameEl) {
-						updateValue(autocompletePrefix + 'place_name', '');
-						placeNameEl.disabled = false;
+					var placeNameId = autocompletePrefix + 'place_name';
+					if (document.getElementById(placeNameId)) {
+						updateAndEnable(placeNameId, '');
 						if (place.displayName) {
-							updateValue(autocompletePrefix + 'place_name', place.displayName);
+							updateAndEnable(placeNameId, place.displayName);
 						}
 					}\n" : ""); ?>
 				} else {
 					// No place selected — clear the original field and lat/lng
 					$field.val('');
 					$field.change();
-					<?php echo ($set->latitude  ? "updateValue('latitude',  '');\n" : ""); ?>
-					<?php echo ($set->longitude ? "updateValue('longitude', '');\n" : ""); ?>
+					<?php echo ($set->latitude  ? "updateAndEnable('latitude',  '');\n" : ""); ?>
+					<?php echo ($set->longitude ? "updateAndEnable('longitude', '');\n" : ""); ?>
 					<?php echo ($set->placeName ? "
 					// Enable as well as clear, for the same submit reason as above.
-					var clearedPlaceNameEl = document.getElementById(autocompletePrefix + 'place_name');
-					if (clearedPlaceNameEl) {
-						updateValue(autocompletePrefix + 'place_name', '');
-						clearedPlaceNameEl.disabled = false;
+					var clearedPlaceNameId = autocompletePrefix + 'place_name';
+					if (document.getElementById(clearedPlaceNameId)) {
+						updateAndEnable(clearedPlaceNameId, '');
 					}\n" : ""); ?>
 				}
 
