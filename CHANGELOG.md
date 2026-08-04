@@ -59,6 +59,16 @@ releasing, rename the deployment directory and tag the commit to match the versi
   `12` would have yielded `1`. Documentation only; the parser is unchanged and every row in the
   table was re-verified against it.
 
+- **The test harness files are namespaced, so REDCap's module security scan passes cleanly.**
+  `tests/fixtures.php` and `tests/golden.php` declared functions and a constant in the global
+  namespace, which the scan's `ExternalModules.Misc.RequireNamespace` rule reports as four errors —
+  global definitions risk colliding with REDCap core or another module. Both files now declare
+  `namespace johnbarrett\Google_Address_Autocomplete;`, matching the module. `golden.php` no longer
+  needs its `use` statement for the module class, as it now shares that namespace. Unqualified
+  calls to built-ins such as `printf()` and `ob_start()` still resolve, because PHP falls back to
+  the global namespace for functions and constants. Test-only; the module ships neither file, and
+  all 15 golden fixtures remain byte-identical.
+
 ## [1.0.1] - 2026-08-03
 
 A correctness release. Four of these are defects in how destination fields reach REDCap — most

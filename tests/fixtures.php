@@ -1,4 +1,4 @@
-<?php
+<?php namespace johnbarrett\Google_Address_Autocomplete;
 
 /**
  * Settings scenarios for the golden-output harness.

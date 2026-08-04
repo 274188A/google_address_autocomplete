@@ -1,4 +1,4 @@
-<?php
+<?php namespace johnbarrett\Google_Address_Autocomplete;
 
 /**
  * Golden-output harness.
@@ -20,7 +20,8 @@ require_once __DIR__ . '/stub/AbstractExternalModule.php';
 require_once __DIR__ . '/fixtures.php';
 require_once __DIR__ . '/../Google_Address_Autocomplete.php';
 
-use johnbarrett\Google_Address_Autocomplete\Google_Address_Autocomplete;
+// No use statement for Google_Address_Autocomplete: this file now shares the
+// module's namespace, so the class resolves without one.
 
 const GOLDEN_DIR = __DIR__ . '/golden';
 
