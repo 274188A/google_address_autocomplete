@@ -2,31 +2,23 @@
 
 use ExternalModules\AbstractExternalModule;
 
-// Required explicitly rather than relying on the framework. REDCap derives the
-// MAIN class file name from the namespace, but whether it autoloads additional
-// classes in that namespace is not documented — and a wrong guess is a fatal on
-// every survey page, so this does not rely on finding out.
+// REDCap derives the main class file name from the namespace; whether it also
+// autoloads sibling classes is undocumented, so they are required explicitly.
 require_once __DIR__ . '/AddressComponent.php';
 require_once __DIR__ . '/AddressFieldSet.php';
 
 class Google_Address_Autocomplete extends AbstractExternalModule
 {
-	// Every value emitted into an inline <script> goes through json_encode with these
-	// flags. JSON_HEX_TAG is the one that matters most: it stops a "</script>" sequence
-	// inside any setting from closing the block early. The rest cover the quote
-	// characters, so the result is always a safe JS string literal.
+	// JSON_HEX_TAG is the one that matters: it stops a "</script>" sequence inside a
+	// setting value from closing the inline script early.
 	private const JSON_FLAGS = JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT;
 
-	// What the participant types is relayed to Google to generate the predictions, which
-	// has to be disclosed to them on the form rather than only to the project
-	// administrator in the README. The notice therefore shows by DEFAULT; an
-	// administrator can reword it, or suppress it only if their consent form already
-	// covers the disclosure.
+	// Shown by default. What the participant types is relayed to Google, which has to be
+	// disclosed on the form; an administrator can reword or suppress it.
 	private const DEFAULT_PRIVACY_NOTICE = 'Address suggestions come from Google. What you type in this box is sent to Google Maps to generate them.';
 
-	// Hook methods must be named exactly after the REDCap hook they implement. From
-	// framework version 12 onward these run automatically and config.json carries no
-	// "permissions" block; the legacy hook_* names no longer fire at all.
+	// Framework 12+ runs redcap_* methods automatically, so config.json carries no
+	// "permissions" block. The legacy hook_* names do not fire.
 	public function redcap_survey_page($project_id, $record, $instrument, $event_id, $group_id, $survey_hash, $response_id, $repeat_instance) {
 		$this->addAddressAutoCompletion($project_id, $instrument);
 	}
@@ -35,14 +27,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		$this->addAddressAutoCompletion($project_id, $instrument);
 	}
 
-	/**
-	 * Emit the widget for every address field set that applies to this page.
-	 *
-	 * The API key, the bootstrap loader and the privacy notice are project-wide and are
-	 * emitted at most ONCE. Everything else is per-set: each set gets its own IIFE, its
-	 * own element-id prefix, and its own copy of the behaviour. Two sets on one page
-	 * therefore share nothing but the Google Maps API itself.
-	 */
+	/** The loader and styles are emitted once; each set then gets its own IIFE. */
 	private function addAddressAutoCompletion($project_id, $instrument): void {
 		$key = $this->getProjectSetting('google-api-key', $project_id);
 		if (!$key) { return; }
@@ -63,15 +48,8 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 	}
 
 	/**
-	 * The configured address field sets that should run on this instrument.
-	 *
-	 * A misconfigured set is skipped and logged, never fatal: one bad set must not cost
-	 * the participant the other address boxes on the form.
-	 *
-	 * Note the defensive reads. Sub-settings are stored flat, one parallel array per
-	 * child key, so a child added to config.json after a project was configured simply
-	 * does not appear in the returned instance array — every child must be existence
-	 * checked rather than assumed.
+	 * The sets that should run on this instrument. A misconfigured set is skipped and
+	 * logged, never fatal — one bad set must not cost the participant the others.
 	 *
 	 * @return AddressFieldSet[]
 	 */
@@ -86,18 +64,17 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		foreach ($sets as $index => $raw) {
 			if (!is_array($raw)) { continue; }
 
-			// The CONFIGURED position, not the position among the active sets, so a set's
-			// element ids stay the same no matter which other sets qualify on a page.
+			// The configured position, not the position among active sets: a set's element
+			// ids must not shift when a different set qualifies on a page.
 			$set = AddressFieldSet::fromSubSetting($raw, $index);
 
 			if (!$set->isActive()) { continue; }
 
-			// Instrument scope. Blank means "any form containing the source field", which
-			// the client-side guard in the emitted IIFE still enforces.
+			// Blank scope means "any form containing the source field", which the emitted
+			// IIFE still guards client-side.
 			if (!$set->appliesTo((string)$instrument)) { continue; }
 
-			// Two sets cannot share a source field: both would wrap and hide the same
-			// input, and only one widget could survive. Skip the later one.
+			// Two sets cannot share a source field: both would wrap the same input.
 			$source = $set->sourceKey();
 			if (isset($claimedSources[$source])) {
 				$this->log(sprintf(
@@ -109,9 +86,8 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 			}
 			$claimedSources[$source] = $index;
 
-			// A shared DESTINATION field is bad configuration but not fatal — the element
-			// simply ends up owned by whichever set writes last. Warn and carry on rather
-			// than silently dropping a set the administrator can see is configured.
+			// A shared destination field is bad configuration but not fatal: the last write
+			// wins. Warn rather than drop a set the administrator can see is configured.
 			foreach ($this->destinationFieldNames($set) as $fieldName) {
 				if (isset($claimedDestinations[$fieldName])) {
 					$this->log(sprintf(
@@ -130,12 +106,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		return $active;
 	}
 
-	/**
-	 * Google component type => REDCap field name, for the set's mapped components.
-	 * Latitude and longitude are excluded; they are looked up by name.
-	 *
-	 * @return array<string,string>
-	 */
+	/** @return array<string,string> Google component type => field name, excluding lat/lng. */
 	private function destinationFields(AddressFieldSet $set): array {
 		$fields = [];
 		foreach (AddressComponent::cases() as $component) {
@@ -145,20 +116,13 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		return $fields;
 	}
 
-	/**
-	 * Every REDCap field this set writes to, including latitude and longitude — used to
-	 * detect two sets fighting over one field.
-	 *
-	 * @return string[]
-	 */
+	/** @return string[] Every field this set writes to, to detect two sets sharing one. */
 	private function destinationFieldNames(AddressFieldSet $set): array {
 		$names      = [];
 		$properties = array_map(
 			static fn(AddressComponent $component): string => $component->property(),
 			AddressComponent::cases()
 		);
-		// Lat/lng are not AddressComponent cases — they are looked up by field name
-		// rather than by googleSearch_* id — but they are still written to.
 		$properties = array_merge($properties, ['latitude', 'longitude']);
 
 		foreach ($properties as $property) {
@@ -168,29 +132,22 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		return array_keys($names);
 	}
 
-	/**
-	 * The disclosure shown under every widget. Empty string means "emit no notice".
-	 */
+	/** The disclosure shown under every widget. Empty means "emit no notice". */
 	private function resolvePrivacyNotice($project_id): string {
 		if ($this->getProjectSetting('hide-privacy-notice', $project_id)) { return ''; }
 		$custom = trim((string)$this->getProjectSetting('privacy-notice', $project_id));
 		return ($custom !== '') ? $custom : self::DEFAULT_PRIVACY_NOTICE;
 	}
 
-	/**
-	 * Encode a single value as a JS literal. Never returns an empty string: emitting
-	 * "var x = ;" is a syntax error that kills the whole inline script, so json_encode()
-	 * failure falls back to an empty string literal.
-	 */
+	// Every setting emitted into JS goes through jsValue/jsArray/jsObject. None of them
+	// may return an empty string: "var x = ;" is a syntax error that would kill the whole
+	// inline script, so a json_encode() failure falls back to "", [] or {}.
+
 	private function jsValue($value): string {
 		$json = json_encode((string)$value, self::JSON_FLAGS);
 		return ($json === false) ? '""' : $json;
 	}
 
-	/**
-	 * Turn a comma-separated setting into a JS array literal. Same contract as above —
-	 * json_encode() failure falls back to an empty array, never to "".
-	 */
 	private function jsArray($csv): string {
 		$parts = array_map(trim(...), explode(',', (string)$csv));
 		$parts = array_values(array_filter($parts, static fn(string $part): bool => $part !== ''));
@@ -198,33 +155,20 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 		return ($json === false) ? '[]' : $json;
 	}
 
-	/**
-	 * Same contract again, falling back to an empty object.
-	 */
 	private function jsObject($map): string {
 		$json = json_encode((object)$map, self::JSON_FLAGS);
 		return ($json === false) ? '{}' : $json;
 	}
 
-	/**
-	 * Load Google Maps using the official inline bootstrap. This defines
-	 * google.maps.importLibrary immediately (synchronously) and defers the actual network
-	 * load until importLibrary() is called. It is safe even if another module has already
-	 * loaded the API, and is emitted at most once per page however many sets are active.
-	 */
+	/** Google's inline bootstrap: defines importLibrary now, loads on first use. Once per page. */
 	private function emitBootstrapLoader($key): void {
-		// json_encode, NOT htmlspecialchars: this lands in a JavaScript string context,
-		// and HTML entities are not decoded inside <script>, so an html-escaped key would
-		// arrive at Google corrupted rather than safe. json_encode supplies the
-		// surrounding quotes itself.
+		// json_encode, not htmlspecialchars: HTML entities are not decoded inside <script>,
+		// so an html-escaped key would reach Google corrupted.
 		$keyJs = $this->jsValue($key);
 
-		// The loader body is a nowdoc (<<<'SCRIPT') so PHP does NOT interpolate JS
-		// template literals like ${c} as PHP variables. A nowdoc cannot carry the key, so
-		// it arrives as an IIFE ARGUMENT rather than on a global. That matters: module
-		// JavaScript must not add anything to global scope, or it can collide with
-		// another module running on the same page. (The window.google namespace the
-		// loader creates is Google's own, not ours.)
+		// Nowdoc, so PHP does not interpolate JS template literals like ${c}. A nowdoc
+		// cannot carry the key, so it is passed as an IIFE argument — nothing this module
+		// emits may touch global scope, where it could collide with another module.
 		echo '<script>(function(__addressAutoKey){';
 		echo <<<'SCRIPT'
 (g=>{var h,a,k,p="The Google Maps JavaScript API",c="google",l="importLibrary",q="__ib__",m=document,b=window;b=b[c]||(b[c]={});var d=b.maps||(b.maps={}),r=new Set,e=new URLSearchParams,u=()=>h||(h=new Promise(async(f,n)=>{await (a=m.createElement("script"));e.set("libraries",[...r]+"");for(k in g)e.set(k.replace(/[A-Z]/g,t=>"_"+t[0].toLowerCase()),g[k]);e.set("callback",c+".maps."+q);a.src=`https://maps.${c}apis.com/maps/api/js?`+e;d[q]=f;a.onerror=()=>h=n(Error(p+" could not load."));a.nonce=m.querySelector("script[nonce]")?.nonce||"";m.head.append(a)}));d[l]?console.warn(p+" only loads once. Ignoring:",g):d[l]=(f,...n)=>r.add(f)&&u().then(()=>d[l](f,...n))})({key:__addressAutoKey,v:"weekly"});
@@ -232,12 +176,7 @@ SCRIPT;
 		echo '})(' . $keyJs . ');</script>';
 	}
 
-	/**
-	 * Styles for the wrapper each search box is placed in. Emitted once per page.
-	 *
-	 * These are keyed on a CLASS, never an id: a page can carry several wrappers, and a
-	 * repeated id is invalid HTML that would make the first match win every lookup.
-	 */
+	/** Keyed on a class never an id, because a page can carry several wrappers. */
 	private function emitStyles(): void {
 		?>
 		<style>
@@ -257,68 +196,39 @@ SCRIPT;
 	}
 
 	/**
-	 * Emit one self-contained IIFE for one address field set.
-	 *
-	 * Settings are baked in at emit time, not read at runtime, and optional features are
-	 * compiled out entirely — an unconfigured feature emits no code and cannot misfire.
-	 *
-	 * Nothing here may carry a fixed DOM id. Every id the script creates or looks up is
-	 * built from autocompletePrefix, which is unique to this set; that is the whole
-	 * mechanism by which two sets on one page stay out of each other's way.
+	 * One self-contained IIFE per set. Settings are baked in at emit time, so an
+	 * unconfigured feature emits no code at all, and every DOM id is built from
+	 * autocompletePrefix — which is what keeps two sets on one page apart.
 	 */
 	private function emitSetScript(AddressFieldSet $set, string $privacyNoticeText): void {
 		$destinationFields = $this->destinationFields($set);
 		?>
 		<script>
 		(function() {
-			// Unique to this address field set. Every element id the script assigns or
-			// looks up is built from it, which is what keeps two sets on one page from
-			// writing into each other's fields.
+			// Unique per set. Every element id is built from it, which is what keeps two
+			// sets on one page out of each other's fields.
 			var autocompletePrefix = <?php echo $this->jsValue($set->elementPrefix()); ?>;
 			var autocompleteFieldName = <?php echo $this->jsValue($set->autocomplete); ?>;
 
-			// Console identity for this set. Purely diagnostic.
 			var logPrefix = '[Address Autocomplete ' + <?php echo $this->jsValue($set->label()); ?> + '] ';
 
-			// REDCap field names for the address components, keyed by Google
-			// component type. Emitted as one JSON object rather than interpolated
-			// into a selector per field, so no setting value ever lands in JS
-			// unescaped.
+			// One JSON object rather than a selector per field, so nothing lands unescaped.
 			var destinationFields = <?php echo $this->jsObject($destinationFields); ?>;
 			var latitudeFieldName  = <?php echo $this->jsValue($set->latitude); ?>;
 			var longitudeFieldName = <?php echo $this->jsValue($set->longitude); ?>;
 
-			// Disclosure shown under the search box. Empty when the administrator has
-			// suppressed it. See addPrivacyNotice().
+			// Empty when the administrator has suppressed the disclosure.
 			var privacyNoticeText = <?php echo $this->jsValue($privacyNoticeText); ?>;
 
-			/**
-			 * Look a field up by its REDCap name.
-			 *
-			 * The quote/backslash escape matters: a field name is interpolated into
-			 * an attribute-equals selector, where an unescaped quote would end the
-			 * selector string and throw a jQuery syntax error, taking the whole
-			 * IIFE down with it.
-			 */
+			// The escape matters: an unescaped quote would end the attribute selector and
+			// throw, taking the whole IIFE with it.
 			function byName(name) {
 				if (!name) { return $(); }
 				return $('[name="' + String(name).replace(/["\\]/g, '\\$&') + '"]');
 			}
 
-			/**
-			 * Enable or disable every field this set writes to.
-			 *
-			 * Disabled on load, then re-enabled per component as a selection fills
-			 * it in. showAutocompleteError() re-enables the whole set instead: when
-			 * the widget never loads nothing will ever fill these in, and a
-			 * disabled input is not submitted, so leaving them disabled would make
-			 * manual entry save blank.
-			 *
-			 * Iterates destinationFields rather than componentForm: place_name is
-			 * a destination but is deliberately absent from componentForm (it is
-			 * read from place.displayName, not from addressComponents), and would
-			 * otherwise be left stuck disabled.
-			 */
+			// Iterates destinationFields, not componentForm: that has no place_name entry
+			// and would leave the field stuck disabled.
 			function setDestinationFieldsDisabled(disabled) {
 				$.each(destinationFields, function(componentType, fieldName) {
 					byName(fieldName).prop('disabled', disabled);
@@ -328,29 +238,20 @@ SCRIPT;
 				byName(longitudeFieldName).prop('disabled', disabled);
 			}
 
-			// Raw text the user typed into the search box, kept so the unit /
-			// apartment number can be recovered when Google omits it. See
-			// recoverUnitFromText().
+			// Raw typed text, kept so recoverUnitFromText() can recover a unit Google omitted.
 			var lastTypedText = '';
 
-			// Whether the address field currently holds a formatted address that
-			// THIS session's autocomplete wrote, rather than one saved against the
-			// record earlier. The degrade path needs the distinction: a value from
-			// a previous save is stale the moment the participant starts typing a
-			// new address, whereas one written by a selection this session is the
-			// good address and must not be replaced by a half-typed fragment.
+			// Whether the address field holds an address this session's autocomplete wrote,
+			// rather than one saved against the record earlier. The degrade path needs the
+			// distinction.
 			var fieldHoldsSelectedAddress = false;
 
-			// Component mapping: Google address type -> format preference
+			// Google component type -> the Place API property to read off it.
 			//
-			// Do NOT add subpremise here. This object doubles as the registry of
-			// "which components have a destination field", and every entry is
-			// cleared through updateValue(autocompletePrefix + type) on each
-			// selection. No googleSearch_*subpremise element is ever created, so an
-			// entry here would only log "Could not find the element" every time.
-			// The unit is captured by extractUnitParts() instead.
-			// The keys are Google address component TYPE names; the values are the
-			// Place API property to read off the component.
+			// Do not add subpremise. This doubles as the registry of components that have a
+			// destination field, and no googleSearch_*subpremise element is ever created, so
+			// an entry would only log "Could not find the element". extractUnitParts()
+			// captures the unit instead.
 			var componentForm = {
 <?php foreach (AddressComponent::addressComponents() as $component): ?>
 				<?php echo ($set->{$component->property()} !== '' ? $component->value . ": '" . $component->format() . "'," : ""); ?>
@@ -358,45 +259,30 @@ SCRIPT;
 			};
 
 			$(document).ready(function() {
-				// Guard — only proceed if this set's autocomplete target field exists
-				// on this particular instrument / form page. The set may also have
-				// been scoped to specific instruments server-side; this covers the
-				// case where it was not.
+				// Fallback for a set with no instrument scope configured server-side.
 				var $autocompleteField = byName(autocompleteFieldName);
 				if ($autocompleteField.length === 0) {
-					return; // Field not on this form; do nothing.
+					return;
 				}
 
-				// Set up component destination fields: assign the ids updateValue()
-				// looks them up by. Lat/lng get no googleSearch_* id — they are
+				// Assign the ids updateValue() looks these up by. Lat/lng get none: they are
 				// found by name instead.
 				$.each(destinationFields, function(componentType, fieldName) {
 					byName(fieldName).attr('id', autocompletePrefix + componentType);
 				});
 
-				// Disable every destination field, lat/lng included, until a
-				// prediction is chosen or autocomplete fails to load.
+				// Disabled until a prediction is chosen or autocomplete fails to load.
 				setDestinationFieldsDisabled(true);
 
-				// Wrap original field and hide it; the PlaceAutocompleteElement will
-				// replace it visually. The wrapper is identified by CLASS, not id —
-				// several sets can be wrapped on one page.
+				// The wrapper is found by class, not id: several sets can share a page.
 				$autocompleteField.wrap('<div class="gaa-location-field"></div>');
 				$autocompleteField.hide();
 
-				// Initialize the autocomplete once the Google Maps API is available
 				initAutocomplete($autocompleteField);
 			});
 
-			/**
-			 * Polls until google.maps.importLibrary exists, rejecting after the
-			 * timeout (default 15 s).
-			 *
-			 * The bootstrap loader defines importLibrary synchronously, so this
-			 * resolves immediately when "Import Google API" is enabled. The polling is
-			 * for the other case: another module supplies the API, possibly after
-			 * $(document).ready has already run.
-			 */
+			// Resolves immediately when this module emitted the loader. The polling is for
+			// the case where another module supplies the API late.
 			function waitForImportLibrary(timeoutMs) {
 				timeoutMs = timeoutMs || 15000;
 				return new Promise(function(resolve, reject) {
@@ -425,23 +311,15 @@ SCRIPT;
 				});
 			}
 
-			/**
-			 * Load the Places library. This is the only Google library the module
-			 * imports — see initWithNewApi() and applyGeolocationBias(), which are
-			 * deliberately written to need nothing from `maps` or `core`.
-			 */
+			/** The only library the module imports. Nothing may reference maps or core. */
 			function loadPlacesLibrary() {
 				return waitForImportLibrary().then(function() {
 					return google.maps.importLibrary('places');
 				});
 			}
 
-			/**
-			 * Initialise autocomplete on the given field using PlaceAutocompleteElement
-			 * (Places API New). If that class is absent the API key almost certainly
-			 * does not have Places API (New) enabled — show the error rather than
-			 * degrading to something that looks broken but reports nothing.
-			 */
+			// A missing PlaceAutocompleteElement means the key has no Places API (New). Show
+			// the error rather than degrade to something that looks broken and reports nothing.
 			function initAutocomplete($field) {
 				loadPlacesLibrary()
 					.then(function(placesLib) {
@@ -452,15 +330,12 @@ SCRIPT;
 							);
 							return;
 						}
-						console.log(logPrefix + 'Using Places API (New) — PlaceAutocompleteElement');
 						initWithNewApi(placesLib.PlaceAutocompleteElement, $field);
 					})
 					.catch(function(err) {
 						console.error(logPrefix + 'Failed to initialise.', err);
-						// initWithNewApi() runs inside this promise chain, so a throw
-						// AFTER the widget was inserted lands here too. In that case
-						// the widget is on the form and must be torn down — otherwise
-						// un-hiding $field would leave two address boxes stacked.
+						// initWithNewApi() runs inside this chain, so a throw after the widget
+						// was inserted lands here too and the widget must be torn down.
 						if (liveAutocomplete) {
 							degradeToManualEntry($field,
 								'Falling back to manual entry after the widget failed post-insertion: ' +
@@ -471,71 +346,47 @@ SCRIPT;
 					});
 			}
 
-			// Set once the widget has been given up on, so the degrade path runs at
-			// most once however many times it is reached. gmp-error in particular
-			// can fire repeatedly, and a second run would stack another banner.
+			// Set once the widget is given up on. gmp-error can fire repeatedly, and a
+			// second run would stack another banner.
 			var autocompleteFailed = false;
 
-			// The live widget, once it is actually in the DOM — NOT merely
-			// constructed. Failure handling has to tell those apart: a widget that
-			// was inserted has to be torn down and may hold typed text, whereas one
-			// that never got that far leaves nothing behind to clean up.
+			// The widget once it is in the DOM, not merely constructed. Only an inserted
+			// widget has to be torn down, and only it can be holding typed text.
 			var liveAutocomplete = null;
 
-			// How many denied requests in a row to tolerate before giving up on
-			// the widget. A permanent cause — bad key, referrer restriction,
-			// billing off — denies every request, and requests go out per
-			// keystroke, so this is reached within about a second of typing and
-			// the participant is told almost as fast as before. What it buys is
-			// that a momentary denial no longer costs them autocomplete for the
-			// rest of the page.
+			// Denials tolerated before giving up. A permanent cause denies every request, and
+			// requests go out per keystroke, so this is still reached within a second.
 			var MAX_CONSECUTIVE_ERRORS = 3;
 
-			// Denials further apart than this are not the same burst. Without the
-			// window the count is "consecutive" in name only: gmp-select is the
-			// only other reset and it needs the participant to actually pick a
-			// prediction, so three unrelated blips minutes apart would add up to
-			// a degrade.
+			// Denials further apart than this are not one burst. Without the window, three
+			// unrelated blips minutes apart would add up to a degrade.
 			var ERROR_BURST_WINDOW_MS = 10000;
 
 			var consecutiveErrors = 0;
 			var lastErrorAt       = 0;
 
-			// Shown when the API never loaded at all — the usual cause is a blocked
-			// request, which reloading after allow-listing does fix.
+			// Shown when the API never loaded. The usual cause is a blocked request.
 			var LOAD_FAILURE_MESSAGE =
 				'&#9888; Address autocomplete could not load. ' +
 				'If you have an ad blocker, please allow <b>googleapis.com</b> and reload. ' +
 				'You can still type the address manually.';
 
-			// Shown when Google loaded but denied the request. Deliberately does NOT
-			// mention ad blockers or reloading: the cause is server-side (API key,
-			// billing, referrer restriction, an invalid filter value) and reloading
-			// would only send the participant chasing a browser problem they do not
-			// have.
+			// Shown when Google loaded but denied the request. Deliberately says nothing
+			// about ad blockers or reloading: the cause is server-side.
 			var REQUEST_DENIED_MESSAGE =
 				'&#9888; Address suggestions are unavailable right now. ' +
 				'Please type your address manually.';
 
-			/**
-			 * Degrade to plain manual entry and tell the participant.
-			 *
-			 * Every failure path reaches here — the missing PlaceAutocompleteElement
-			 * branch, the load/timeout catch in initAutocomplete(), and the
-			 * gmp-error rejection — so the handling lives in this one place. The
-			 * participant-facing message varies by cause and is passed in; `detail`
-			 * is developer-facing and only ever goes to the console.
-			 */
+			// Every failure path ends here. The message is participant-facing; detail is not.
 			function showAutocompleteError($field, detail, message) {
 				if (autocompleteFailed) { return; }
 				autocompleteFailed = true;
 
-				$field.show(); // un-hide the original text input so the user can still type
+				$field.show();
 				$field.attr('placeholder', 'Address autocomplete unavailable — type manually');
 
-				// Nothing will ever fill these in now, so hand them back to the
-				// participant. Without this they stay disabled, and a disabled
-				// input is not submitted — manual entry would silently save blank.
+				// Nothing will fill these in now, and a disabled input is not submitted, so
+				// manual entry would otherwise save blank.
 				setDestinationFieldsDisabled(false);
 				$field.closest('.gaa-location-field').prepend(
 					'<div style="color:#c00;font-size:12px;margin-bottom:4px;">' +
@@ -545,16 +396,8 @@ SCRIPT;
 				console.warn(logPrefix + detail);
 			}
 
-			/**
-			 * Disclose to the participant that what they type goes to Google.
-			 *
-			 * Called only from the success path in initWithNewApi(): if the widget
-			 * never loads, nothing is sent to Google and there is nothing to disclose.
-			 *
-			 * The text is inserted with .text(), not .html(), so administrator-supplied
-			 * wording is treated as text and can never inject markup — stronger than
-			 * escaping, since no HTML parsing happens at all.
-			 */
+			// Called only from the success path: if the widget never loads, nothing is sent
+			// and there is nothing to disclose. Inserted with .text(), never .html().
 			function addPrivacyNotice($field) {
 				if (!privacyNoticeText) { return; }
 				var $wrapper = $field.closest('.gaa-location-field');
@@ -565,13 +408,9 @@ SCRIPT;
 					.appendTo($wrapper);
 			}
 
-			/**
-			 * Build the PlaceAutocompleteElement and wire up its events.
-			 */
 			function initWithNewApi(PlaceAutocompleteElement, $field) {
-				// The prediction filters are assigned as properties inside try/catch so
-				// that a bad setting value degrades to unfiltered predictions instead of
-				// aborting initialisation and leaving a plain text input on the form.
+				// try/catch so a bad filter value degrades to unfiltered predictions rather
+				// than aborting initialisation and leaving a plain text box on the form.
 				var placeAutocomplete = new PlaceAutocompleteElement();
 				try {
 					var regionCodes  = <?php echo $this->jsArray($set->regionCodes); ?>;
@@ -585,25 +424,14 @@ SCRIPT;
 				placeAutocomplete.id = autocompletePrefix + 'autocomplete';
 				placeAutocomplete.setAttribute('placeholder', 'Enter your address here');
 
-				// Backend rejection (bad API key, billing off, referrer restriction,
-				// an invalid filter value, an exhausted quota, a transient 5xx).
+				// Backend rejection: bad key, billing off, referrer restriction, an invalid
+				// filter value, an exhausted quota, a transient 5xx. Without the teardown the
+				// widget stays on the form looking usable while nothing is ever written.
 				//
-				// The teardown below is what stops the failure being INVISIBLE and
-				// total: without it the widget stays on the form looking usable,
-				// gmp-select never fires, nothing is ever written to the source
-				// field and the destination fields stay disabled — the participant
-				// fills the form in and saves nothing at all.
-				//
-				// But it used to happen on the FIRST error, which made a momentary
-				// denial permanent: the widget was gone for the rest of the page
-				// even though the next request would have succeeded. So a short
-				// burst is tolerated first. The event carries no documented, stable
-				// indication of WHY the request was denied, so a permanent cause
-				// cannot be told from a transient one here — every error is counted
-				// the same way and the raw event is logged for whoever is
-				// debugging. Do NOT branch on a guessed detail property: a
-				// condition that is silently never true reads like working code
-				// forever.
+				// A burst is tolerated first, so a momentary denial is not permanent. The
+				// event carries no documented, stable indication of why the request was
+				// denied, so do not branch on a guessed detail property: a condition that is
+				// silently never true reads like working code forever.
 				placeAutocomplete.addEventListener('gmp-error', function(e) {
 					var now = Date.now();
 					if (now - lastErrorAt > ERROR_BURST_WINDOW_MS) { consecutiveErrors = 0; }
@@ -623,42 +451,30 @@ SCRIPT;
 						consecutiveErrors + ' consecutive requests.');
 				});
 
-				// Insert the new element into the wrapper, before the hidden original
-				// field. Recorded as live from this point on: anything that fails
-				// after this must tear the widget down, not just un-hide $field.
+				// Live from this point on: anything that fails after this must tear the widget
+				// down, not just un-hide $field.
 				$field.before(placeAutocomplete);
 				liveAutocomplete = placeAutocomplete;
 
-				// Disclose the transfer to Google now that the widget is really live.
 				addPrivacyNotice($field);
 
-				// Record what the user actually types, for unit recovery.
-				// The widget's shadow root is closed, but `input` events are composed
-				// so they cross it and retarget to the host element, and `value` is a
-				// documented public property. isTrusted filters out the value the
-				// widget writes back itself once a prediction is chosen.
+				// Record what the user types, for unit recovery. The widget's shadow root is
+				// closed, but input events are composed, so they cross it and retarget to the
+				// host. isTrusted filters out the value the widget writes back itself.
 				placeAutocomplete.addEventListener('input', function(e) {
 					if (!e.isTrusted) { return; }
 					var typed = placeAutocomplete.value || '';
 					lastTypedText = typed;
-					// Emptying the box clears every destination field, so a cleared
-					// search can never leave the previous address behind.
+					// A cleared box must not leave the previous address behind.
 					if (typed === '') { fillInAddress(null, $field); }
 				});
 
-				// Apply geolocation bias to improve relevance
 				applyGeolocationBias(placeAutocomplete);
 
-				// The modern event is "gmp-select"; the event carries a placePrediction
-				// which must be converted to a Place via .toPlace(), then fetched.
 				placeAutocomplete.addEventListener('gmp-select', async function(event) {
-					// A prediction was served and chosen, so whatever denied the
-					// earlier requests has cleared. Reset before the fetch:
-					// fetchFields() failing is a different request's problem, and
-					// tying the reset to it would leave the count armed after a
-					// prediction request that demonstrably worked. Typing is not
-					// evidence Google answered, so the input listener does not
-					// reset it.
+					// A prediction was served and chosen, so the denials have cleared. Reset
+					// before the fetch: fetchFields() failing is a different request's problem.
+					// Typing is not evidence Google answered, so input never resets it.
 					consecutiveErrors = 0;
 
 					var place = null;
@@ -683,43 +499,20 @@ SCRIPT;
 				});
 			}
 
-			/**
-			 * Retire a widget that made it onto the form but cannot be used, handing
-			 * the form back to the participant as plain manual entry.
-			 *
-			 * Two callers, both with a widget already inserted: the gmp-error
-			 * rejection, and a throw from initWithNewApi() after insertion. Unlike
-			 * the never-loaded paths there is live state to deal with — a widget in
-			 * the DOM, and text the participant has typed into it that exists
-			 * NOWHERE else — so both are handled before the shared degrade path runs.
-			 *
-			 * The privacy notice is deliberately left in place. Requests may already
-			 * have gone to Google, so the disclosure is still accurate —
-			 * addPrivacyNotice()'s reasoning about "nothing was sent" covers the
-			 * never-loaded case, which is not this one.
-			 */
+			// For a widget that reached the DOM: unlike the never-loaded paths there is live
+			// state, a widget to remove and typed text that exists nowhere else. The privacy
+			// notice stays: requests may already have gone to Google.
 			function degradeToManualEntry($field, detail) {
-				// GUARD ONLY — do not set autocompleteFailed here. The flag is set
-				// by showAutocompleteError() at the end of this function; setting it
-				// up front would make that call early-return, and the whole degrade
-				// would silently do nothing.
+				// Guard only. Do not set autocompleteFailed here: showAutocompleteError() at
+				// the end would then early-return and the whole degrade would do nothing.
 				if (autocompleteFailed) { return; }
 
 				var placeAutocomplete = liveAutocomplete;
 
-				// Rescue whatever the participant typed. It only exists inside the
-				// widget: $field is written on the gmp-select path, which never
-				// ran.
-				//
-				// The guard used to be "$field is empty". That held on a new form
-				// and failed on an edit form, where $field arrives pre-populated
-				// with the address saved last time: a failure mid-typing threw the
-				// typed text away and left the stale address on screen, looking
-				// like the participant's own entry. The question is not whether
-				// $field holds something, it is whether it holds something this
-				// session's autocomplete put there — which is the one case worth
-				// protecting, because a half-typed fragment is worse than a
-				// formatted address the participant already chose.
+				// Rescue whatever the participant typed; it exists only inside the widget.
+				// The guard is fieldHoldsSelectedAddress, not "is $field empty": on an edit
+				// form $field arrives holding the address saved last time, and a half-typed
+				// fragment must not replace an address the participant actually chose.
 				var typed = '';
 				try {
 					typed = (placeAutocomplete && placeAutocomplete.value) || lastTypedText || '';
@@ -731,9 +524,8 @@ SCRIPT;
 					$field.change();
 				}
 
-				// Remove rather than hide, so the dead widget cannot sit above the
-				// text input as a second address box, and so its input/gmp-select
-				// listeners cannot fire on an element that is no longer in play.
+				// Remove rather than hide, so it cannot sit above the text input as a second
+				// address box and its listeners cannot fire.
 				try {
 					if (placeAutocomplete) { placeAutocomplete.remove(); }
 				} catch (e) {
@@ -744,14 +536,9 @@ SCRIPT;
 				showAutocompleteError($field, detail, REQUEST_DENIED_MESSAGE);
 			}
 
-			/**
-			 * Bias the autocomplete results toward the user's current location.
-			 *
-			 * locationBias accepts a CircleLiteral ({center, radius}) directly, so no
-			 * google.maps.Circle is constructed. That matters: Circle belongs to the
-			 * `maps` library, which this module never imports, so referencing it here
-			 * would throw inside the geolocation callback where nothing catches it.
-			 */
+			// locationBias accepts a CircleLiteral directly, so no google.maps.Circle is
+			// constructed: Circle belongs to the maps library, which is never imported, and
+			// referencing it would throw inside this callback where nothing catches it.
 			function applyGeolocationBias(placeAutocomplete) {
 				if (!navigator.geolocation) { return; }
 				navigator.geolocation.getCurrentPosition(function(position) {
@@ -767,54 +554,25 @@ SCRIPT;
 				});
 			}
 
-			/**
-			 * Resolve an updateValue() id to the element it refers to.
-			 *
-			 * Latitude and longitude are the only two destinations with no
-			 * googleSearch_* id — they are looked up by field NAME instead, which
-			 * is exactly why they were the two the re-enable was missed on.
-			 * Resolving both kinds here is what lets updateAndEnable() work for
-			 * either without having to know which it was handed.
-			 */
+			// Lat/lng are the only destinations with no googleSearch_* id: they are found by
+			// field name instead.
 			function fieldElement(id) {
 				if (id === 'latitude')  { return byName(latitudeFieldName); }
 				if (id === 'longitude') { return byName(longitudeFieldName); }
 				return $('#' + id);
 			}
 
-			/**
-			 * Write a value and hand the field back to REDCap.
-			 *
-			 * Destination fields load disabled and a disabled input is not
-			 * submitted, so a write that does not also enable is a value the
-			 * participant can see and REDCap never receives. That is precisely
-			 * what happened to every coordinate this module has ever written.
-			 *
-			 * Enabling through jQuery rather than element.disabled is deliberate:
-			 * .prop() on an empty set is an inert no-op, so a field mapped in the
-			 * settings but absent from this instrument costs nothing here.
-			 */
+			// Destination fields load disabled and a disabled input is not submitted, so a
+			// write that does not also enable is a value REDCap never receives.
 			function updateAndEnable(id, value) {
 				updateValue(id, value);
 				fieldElement(id).prop('disabled', false);
 			}
 
-			/**
-			 * Blank a field, enabling it ONLY if it actually held something.
-			 *
-			 * A blank has to reach the record only when it is overwriting a value
-			 * — on an edit form, the one saved last time. A field that was already
-			 * empty has nothing to submit, so it stays disabled and stays
-			 * uneditable, which is the entire point of loading the set disabled.
-			 * Enabling every mapped field on every fill made the whole address
-			 * hand-editable after one selection, quietly retiring that guard.
-			 *
-			 * Read BEFORE the clear, and read through .val(): that is the value
-			 * REDCap submits for all three kinds updateValue() handles — the
-			 * hidden input behind a .hiddenradio, the <select> behind an
-			 * .rc-autocomplete, and a plain text input. String(… || '') covers a
-			 * <select> with nothing selected, where .val() is null.
-			 */
+			// Enables only if the field held something: a blank has to reach the record only
+			// when it overwrites a value, and a field that was already empty stays locked.
+			// Read before the clear and through .val(), which is what REDCap submits for all
+			// three kinds updateValue() handles; .val() is null for an unselected select.
 			function clearAndEnable(id) {
 				var element  = fieldElement(id);
 				var hadValue = element.length > 0 && String(element.val() || '') !== '';
@@ -822,12 +580,8 @@ SCRIPT;
 				if (hadValue) { element.prop('disabled', false); }
 			}
 
-			/**
-			 * Helper: update a REDCap field value, handling radios, selects,
-			 * and rc-autocomplete dropdowns.
-			 *
-			 * Does NOT enable the field — callers go through updateAndEnable().
-			 */
+			// Handles radios, selects and rc-autocomplete dropdowns. Does not enable the
+			// field — callers go through updateAndEnable().
 			function updateValue(id, value) {
 				var element = fieldElement(id);
 
@@ -839,11 +593,12 @@ SCRIPT;
 				var eleType = element.prop('type');
 				element.val(value);
 
-				// Handle special REDCap field types
 				var eleName = element.attr('name');
 				if (element.hasClass('hiddenradio')) {
 					$('input[name="'+eleName+'___radio"][value="'+value+'"]').prop('checked', true);
 				} else if (eleType.indexOf("select") >= 0) {
+					// Match in order: exact value, underscored value, "Other", the option whose
+					// text matches, then warn and leave blank.
 					if ($('#'+id+' option[value="'+value+'"]').length > 0) {
 						$('#'+id+' option[value="'+value+'"]').prop('selected', true);
 					} else {
@@ -876,11 +631,8 @@ SCRIPT;
 				}
 			}
 
-			/**
-			 * Pick the unit (subpremise) and street number out of the raw component
-			 * list, independently of componentForm — which has no subpremise entry
-			 * and would otherwise skip it.
-			 */
+			// Walks the raw component list, independently of componentForm, which has no
+			// subpremise entry.
 			function extractUnitParts(components) {
 				var parts = { unit: '', streetNumber: '' };
 				if (!components || !components.length) { return parts; }
@@ -902,23 +654,16 @@ SCRIPT;
 				return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 			}
 
-			/**
-			 * Recover the unit / apartment number from the text the user typed.
-			 *
-			 * Google frequently omits the subpremise component for AU/UK style unit
-			 * addresses: "3/27 Harris St" comes back as street number 27 with no
-			 * subpremise at all. This parses the unit out of the typed text, anchored
-			 * to the street number Google DID return, and returns '' rather than
-			 * guessing whenever the text does not clearly contain a unit.
-			 */
+			// Google frequently omits subpremise for AU/UK unit addresses: "3/27 Harris St"
+			// comes back as street number 27 with no subpremise. Anchored to the street
+			// number Google did return, and returns '' rather than guessing.
 			function recoverUnitFromText(typed, streetNumber) {
 				if (!typed || !streetNumber) { return ''; }
 				var text = String(typed).trim();
 				var sn   = String(streetNumber).trim();
 				if (!text || !sn) { return ''; }
 
-				// Locate the street number on a word boundary, so a street number of
-				// "7" is not matched inside "27".
+				// On a word boundary, so a street number of "7" is not matched inside "27".
 				var snMatch = new RegExp('(^|[^0-9A-Za-z])' + escapeRegExp(sn) + '(?![0-9A-Za-z])').exec(text);
 				if (!snMatch) { return ''; }
 
@@ -933,32 +678,22 @@ SCRIPT;
 				// A unit prefix is short; anything longer is a building or place name.
 				if (prefix.replace(/\s+/g, ' ').trim().length > 24) { return ''; }
 
-				// The prefix must END with a unit token, optionally introduced by a
-				// unit word and optionally followed by "/" or ",". That anchoring is
-				// what rejects "Harris St 27" and "The Old Rectory, 27 Harris St".
+				// Must END with a unit token, which is what rejects "Harris St 27" and
+				// "The Old Rectory, 27 Harris St".
 				var unitMatch = /(?:^|[\s,])(?:(?:unit|apt|apartment|flat|suite|ste|shop|villa|lot|level|lvl|room|rm)\.?\s*)?([0-9]{1,5}[A-Za-z]?)\s*[\/,]?\s*$/i.exec(prefix);
 				return unitMatch ? unitMatch[1].toUpperCase() : '';
 			}
 
-			/**
-			 * Write "3/27" into the Street Number field.
-			 *
-			 * Goes through updateAndEnable() so radios, selects and rc-autocomplete
-			 * dropdowns keep working and the field is re-enabled — disabled inputs
-			 * are not submitted, so REDCap would otherwise never save the value.
-			 */
+			// Through updateAndEnable(), or the field stays disabled and REDCap never
+			// receives the value.
 			function applyUnitToStreetNumber(unit, streetNumber) {
 				var id = autocompletePrefix + 'street_number';
 				if (!document.getElementById(id) || !unit || !streetNumber) { return; }
 				updateAndEnable(id, unit + '/' + streetNumber);
 			}
 
-			/**
-			 * Keep the full address stored in the search field consistent with the
-			 * components, by rewriting a leading bare street number to "3/27".
-			 * No-ops when Google supplied the subpremise, because formattedAddress
-			 * already contains the unit in that case.
-			 */
+			// Rewrites a leading bare street number to "3/27", keeping the stored address
+			// consistent with the components. No-ops when Google supplied the subpremise.
 			function patchFormattedAddress($field, unit, streetNumber) {
 				var current = $field.val();
 				if (!current || !unit || !streetNumber) { return; }
@@ -969,14 +704,8 @@ SCRIPT;
 				}
 			}
 
-			/**
-			 * Apply the unit / sub-premise to the Street Number field. Called after the
-			 * components have been written, so that it overwrites the bare street
-			 * number they just stored.
-			 *
-			 * Does nothing unless a Street Number Field is mapped — that field is the
-			 * only destination for the unit.
-			 */
+			// Runs after the component loop, so it overwrites the bare street number that
+			// loop just wrote. Does nothing unless a Street Number Field is mapped.
 			function applyUnitFromComponents(components, $field) {
 				var parts = extractUnitParts(components);
 				var unit  = parts.unit;
@@ -992,37 +721,21 @@ SCRIPT;
 				patchFormattedAddress($field, unit, parts.streetNumber);
 			}
 
-			/**
-			 * Populate (or clear) all address component fields from the selected Place.
-			 * Uses the NEW Places API property names: addressComponents[].longText / shortText.
-			 */
+			// Populates or clears every destination field from the selected Place.
 			function fillInAddress(place, $field) {
-				// Clear all component fields first: the fields are only filled per
-				// component as a selection supplies them, so a component absent
-				// from the NEW place would otherwise keep its old value. The
-				// enable is conditional — see clearAndEnable().
+				// Clear first, or a component absent from the new place keeps its old value.
 				for (var component in componentForm) {
 					clearAndEnable(autocompletePrefix + component);
 				}
 
 				if (place && place.addressComponents && place.addressComponents.length > 0) {
-					// Write the full formatted address into the hidden original REDCap field
 					$field.val(place.formattedAddress || '');
 					$field.change();
-					// A blank formatted address is nothing worth protecting from
-					// the degrade path, so record what actually landed.
+					// A blank address is nothing worth protecting from the degrade path.
 					fieldHoldsSelectedAddress = ($field.val() !== '');
 
-					// Latitude & Longitude. These are the only destinations looked
-					// up by name rather than by googleSearch_* id, which is how
-					// they came to be the two written without ever being enabled —
-					// so the coordinates were visible on the form and absent from
-					// every saved record.
-					//
-					// Cleared first, for the same reason place_name is: a selected
-					// place with no location must not leave the PREVIOUS address's
-					// coordinates behind, which is a wrong record rather than a
-					// visibly missing value.
+					// Cleared first: a place with no location must not leave the previous
+					// address's coordinates behind, which is a wrong record, not a blank one.
 					<?php echo ($set->latitude  ? "clearAndEnable('latitude');\n"  : ""); ?>
 					<?php echo ($set->longitude ? "clearAndEnable('longitude');\n" : ""); ?>
 					if (place.location) {
@@ -1030,24 +743,14 @@ SCRIPT;
 						<?php echo ($set->longitude ? "updateAndEnable('longitude', place.location.lng());\n" : ""); ?>
 					}
 
-					// Map each address component into the configured REDCap fields
 					for (var i = 0; i < place.addressComponents.length; i++) {
 						var comp = place.addressComponents[i];
-						// Same guard as extractUnitParts(): a component without types
-						// would throw on types[0], and that throw escapes the
-						// gmp-select try/catch — see the coercion note below.
+						// A component without types would throw on types[0], outside any catch.
 						if (!comp || !comp.types || !comp.types.length) { continue; }
 						var addressType = comp.types[0];
 						if (componentForm[addressType] && document.getElementById(autocompletePrefix + addressType)) {
-							// Coerce before use. A component missing the requested text
-							// property would otherwise throw in the county branch below,
-							// and nothing catches it: this runs outside the try in the
-							// gmp-select handler, so the throw would abort the rest of
-							// the fill — unit recovery and the place name included.
-							// Coercing here rather than in the county branch also keeps
-							// undefined out of updateValue(), where it would land in the
-							// select branch as option[value="undefined"] and fall through
-							// to the "not a valid value" warning.
+							// Runs outside the gmp-select try/catch, so a component missing the
+							// requested property would abort the rest of the fill uncaught.
 							var val = String(comp[componentForm[addressType]] || '');   // 'shortText' or 'longText'
 							if (addressType === 'administrative_area_level_2') {
 								val = $.trim(val.replace('County', ''));
@@ -1056,18 +759,11 @@ SCRIPT;
 						}
 					}
 
-					// Unit / sub-premise. Runs after the loop above so it overwrites
-					// the bare street number that loop just wrote.
 					applyUnitFromComponents(place.addressComponents, $field);
 					<?php echo ($set->placeName ? "
-					// place_name is not in componentForm, so the clear loop above does
-					// not reach it — clear it explicitly, then refill. A conditional
-					// write would leave a name captured for an earlier selection
-					// attached to a DIFFERENT address, which is worse for the record
-					// than a blank field. It goes through the same clearAndEnable()
-					// as the components, so a name that was saved earlier is enabled
-					// and the blank reaches the record, and a field that was blank
-					// already stays locked.
+					// place_name is not in componentForm, so the clear loop above does not reach
+					// it. Clear then refill unconditionally, or a name captured for an earlier
+					// selection stays attached to a different address.
 					var placeNameId = autocompletePrefix + 'place_name';
 					if (document.getElementById(placeNameId)) {
 						clearAndEnable(placeNameId);

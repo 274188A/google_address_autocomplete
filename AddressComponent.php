@@ -1,27 +1,17 @@
 <?php namespace johnbarrett\Google_Address_Autocomplete;
 
 /**
- * A Google address component the module can write into a REDCap field.
+ * A Google address component the module can write into a REDCap field. Both the PHP
+ * destination-field map and the emitted componentForm map are generated from here, so
+ * the two cannot drift apart.
  *
- * The case value is the Google address component type, which doubles as the
- * googleSearch_* element-id suffix — so this drives both the id assignment and
- * the component lookup on the client.
+ * The case value is the Google component type, which doubles as the googleSearch_*
+ * element-id suffix. Latitude and longitude are not cases: they are looked up by field
+ * name instead, so they are emitted separately.
  *
- * This exists to keep two lists in step. The PHP needed a component type =>
- * destination-field map, and the emitted JavaScript needed a component type =>
- * Place API property map (componentForm), which used to be seven hand-written
- * conditional lines. They had to agree, and nothing enforced it: the two lists
- * had already drifted into different orders. Both are now generated from here.
- *
- * Latitude and longitude are deliberately NOT cases. They are looked up by field
- * NAME rather than by googleSearch_* id (see updateValue in the emitted script),
- * so they are emitted separately and are not part of this map.
- *
- * Do NOT add subpremise. componentForm doubles as the registry of "components
- * with a destination element", and every entry is cleared through
- * updateValue(autocompletePrefix + type) on each selection. No
- * googleSearch_*subpremise element is ever created, so an entry would only log
- * "Could not find the element" every time. extractUnitParts() handles the unit.
+ * Do not add subpremise. componentForm doubles as the registry of components that have
+ * a destination element, and every entry is cleared on each selection, so an entry with
+ * no element would only log "Could not find the element". extractUnitParts() handles it.
  */
 enum AddressComponent: string
 {
@@ -50,15 +40,11 @@ enum AddressComponent: string
 	}
 
 	/**
-	 * Which Place API property to read off the address component — the value side
-	 * of the emitted componentForm map.
+	 * The Place API property to read off the component — the value side of componentForm.
 	 *
-	 * Null means "not an address component at all": place_name is mapped from
-	 * place.displayName, not from addressComponents, so there is no component
-	 * property to read and it must never appear in componentForm — the fill loop
-	 * would find nothing to write. fillInAddress() clears, enables and refills it
-	 * explicitly instead, so that a name captured for one selection cannot stay
-	 * attached to a different address.
+	 * Null means "not an address component": place_name comes from place.displayName, so
+	 * it must never appear in componentForm. fillInAddress() clears and refills it
+	 * explicitly, so a name captured for one selection cannot stay on a different address.
 	 */
 	public function format(): ?string
 	{

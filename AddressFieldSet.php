@@ -3,13 +3,9 @@
 /**
  * One configured address field set: a search box and the REDCap fields it fills.
  *
- * REDCap hands sub-settings back as a plain associative array per configured set.
- * This turns one of those arrays into a checked, named shape exactly once, at the
- * boundary, so the rest of the module reads properties instead of re-deriving the
- * same trim/cast/default on every access.
- *
- * Readonly because a set is configuration: it is read many times while emitting a
- * page and never modified.
+ * REDCap hands sub-settings back as a plain array per configured set. This turns one of
+ * those into a checked, named shape once, at the boundary. Readonly because a set is
+ * configuration — read many times while emitting a page, never modified.
  */
 final readonly class AddressFieldSet
 {
@@ -40,11 +36,10 @@ final readonly class AddressFieldSet
 	/**
 	 * Build a set from one raw REDCap sub-setting array.
 	 *
-	 * Every read is defensive, and that is load-bearing rather than merely cautious.
-	 * Sub-settings are stored flat, one parallel array per child key, so a key added
-	 * to config.json after a project was configured is simply ABSENT from the array
-	 * REDCap returns. No parameter here may become required: that would turn a
-	 * routine settings addition into a fatal on already-configured projects.
+	 * Sub-settings are stored flat, one parallel array per child key, so a key added to
+	 * config.json after a project was configured is simply absent from the array REDCap
+	 * returns. No parameter here may become required, or a routine settings addition
+	 * becomes a fatal on already-configured projects.
 	 */
 	public static function fromSubSetting(array $raw, int $index): self
 	{
@@ -53,8 +48,7 @@ final readonly class AddressFieldSet
 			description:  self::text($raw, 'set-description'),
 			disabled:     !empty($raw['set-disabled']),
 			forms:        self::formList($raw, 'set-form'),
-			// Not trimmed: preserved exactly as configured, because it is compared
-			// against the claimed-source map and emitted as the lookup name.
+			// Not trimmed: emitted as the lookup name, so it must match exactly.
 			autocomplete: (string)($raw['set-autocomplete'] ?? ''),
 			streetNumber: self::text($raw, 'set-street-number'),
 			street:       self::text($raw, 'set-street'),
@@ -78,10 +72,7 @@ final readonly class AddressFieldSet
 		return trim((string)($raw[$key] ?? ''));
 	}
 
-	/**
-	 * A repeatable form-list setting, which REDCap may return as a bare scalar when
-	 * only one entry was chosen.
-	 */
+	/** A repeatable form-list, which REDCap returns as a bare scalar for a single entry. */
 	private static function formList(array $raw, string $key): array
 	{
 		$forms = $raw[$key] ?? [];
@@ -92,39 +83,25 @@ final readonly class AddressFieldSet
 		return array_values(array_filter($forms, static fn(string $form): bool => $form !== ''));
 	}
 
-	/**
-	 * Whether this set should run at all. A set with no source field was added in the
-	 * configuration dialog but never filled in.
-	 */
+	/** A set with no source field was added in the configuration dialog but never filled in. */
 	public function isActive(): bool
 	{
 		return !$this->disabled && $this->sourceKey() !== '';
 	}
 
-	/**
-	 * The source field, trimmed, for comparing one set against another.
-	 *
-	 * The property itself is stored untrimmed because that is the value emitted into
-	 * the script and looked up by name; this is only for identity comparisons.
-	 */
+	/** The source field trimmed, for identity comparisons only. */
 	public function sourceKey(): string
 	{
 		return trim($this->autocomplete);
 	}
 
-	/**
-	 * Whether this set applies to the given instrument. No configured instrument means
-	 * "any form containing the source field", which the emitted script still guards.
-	 */
+	/** No configured instrument means "any form with the source field"; the script guards that. */
 	public function appliesTo(string $instrument): bool
 	{
 		return !$this->forms || in_array($instrument, $this->forms, true);
 	}
 
-	/**
-	 * How this set identifies itself in the browser console, so two sets on one page
-	 * can be told apart when debugging.
-	 */
+	/** How this set identifies itself in the browser console. */
 	public function label(): string
 	{
 		return '#' . ($this->index + 1) . ($this->description !== '' ? ' ' . $this->description : '');

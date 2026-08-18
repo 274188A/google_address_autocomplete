@@ -11,7 +11,7 @@ address in the original field.
 A project can configure **several independent address field sets**: the participant's home
 address on one instrument, their GP practice address on another.
 
-Single-file PHP module. Nothing to build, no dependencies to install.
+Nothing to build, and no dependencies to install.
 
 ---
 
@@ -19,14 +19,14 @@ Single-file PHP module. Nothing to build, no dependencies to install.
 
 | | |
 |---|---|
-| **REDCap 14.6.4+** | The module declares External Modules framework version 16; REDCap will not enable it on an older release. LTS 15.0.9+ carries framework 16. |
+| **REDCap 14.6.4+** | Or LTS 15.0.9 and later. REDCap will not enable the module on an older release. |
 | **HTTPS** | Google's geolocation and Places APIs will not run over plain HTTP. |
 | **A Google Maps API key** | With **Places API (New)** enabled, plus a billing account. Google no longer enables the *legacy* Places API for newly issued keys, and this module has no legacy fallback. |
 
 ## Quick start
 
-1. **Copy** `Google_Address_Autocomplete.php` and `config.json` into
-   `redcap/modules/<module_name>_v<version>/`.
+1. **Copy** `Google_Address_Autocomplete.php`, `AddressComponent.php`, `AddressFieldSet.php` and
+   `config.json` into `redcap/modules/<module_name>_v<version>/`.
    *Don't rename that directory* — REDCap derives the module prefix and version from it.
 
 2. **Enable** the module in **Control Center → External Modules**, then enable it on your project.
@@ -59,22 +59,19 @@ Not working? Go straight to
 | [How it behaves on the form](https://github.com/274188A/google_address_autocomplete/blob/main/docs/form-behaviour.md) | You want to know what the participant sees — and how unit/apartment numbers are recovered |
 | [Security and privacy](https://github.com/274188A/google_address_autocomplete/blob/main/docs/security-and-privacy.md) | **Before going live.** Locking down the API key, and the disclosure to participants |
 | [Troubleshooting](https://github.com/274188A/google_address_autocomplete/blob/main/docs/troubleshooting.md) | Something isn't working |
-| [Execution flow](https://github.com/274188A/google_address_autocomplete/blob/main/docs/execution-flow.md) | Tracing a page render end to end, with a diagram per phase |
-| [Development](https://github.com/274188A/google_address_autocomplete/blob/main/docs/development.md) | Changing the code — test harnesses, limits, docs layout |
 
-## About this project
+Changing the code? See
+[Development](https://github.com/274188A/google_address_autocomplete/blob/main/docs/development.md)
+and
+[Execution flow](https://github.com/274188A/google_address_autocomplete/blob/main/docs/execution-flow.md).
+
+## About
 
 Parts of this module — code, review and documentation — were produced with assistance from
-[Claude](https://claude.ai) (Anthropic), used via Claude Code. Everything was reviewed by the
-maintainer before release, and behaviour is verified against a live REDCap instance.
-Responsibility for the code rests with the maintainer, not the tool.
+[Claude](https://claude.ai) (Anthropic). Everything was reviewed by the maintainer before release
+and verified against a live REDCap instance.
 
-**Changelog:**
-[CHANGELOG.md](https://github.com/274188A/google_address_autocomplete/blob/main/CHANGELOG.md).
-Note that REDCap reads the deployed version from the module directory name (`_v<version>`), not
-from `config.json` — so a release means renaming the deployment directory and tagging the commit
-to match.
-
-**License:** MIT — see
+[Changelog](https://github.com/274188A/google_address_autocomplete/blob/main/CHANGELOG.md) ·
+**License:** MIT, see
 [LICENSE](https://github.com/274188A/google_address_autocomplete/blob/main/LICENSE).
 Copyright © 2026 John Barrett.

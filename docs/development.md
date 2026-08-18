@@ -2,8 +2,13 @@
 
 [← Back to the README](../README.md)
 
-There is no build system and no package manager. Deployment is copying two files —
-see [Installation](installation.md).
+There is no build system and no package manager. Deployment is copying four files —
+`Google_Address_Autocomplete.php`, `AddressComponent.php`, `AddressFieldSet.php` and
+`config.json`. See [Installation](installation.md).
+
+REDCap reads the deployed version from the module **directory name** (`_v<version>`), not from
+`config.json`, so a release means renaming the deployment directory and tagging the commit to
+match [CHANGELOG.md](../CHANGELOG.md).
 
 [Execution flow](execution-flow.md) traces a page render end to end — which address field sets
 are emitted server-side, how the Google widget is attached to the form, and what a selection
@@ -82,6 +87,154 @@ inline script.
 `php -l` is likewise a syntax check, not a compatibility check. The maintainer's PHP is 8.5 while
 `config.json` sets a floor of 8.2, so 8.3+ syntax lints clean locally and would fatal on the
 server. That ceiling has to be held by review.
+
+## Design notes
+
+The code carries short comments where a line is genuinely non-obvious. The reasoning behind the
+decisions those comments guard is collected here instead, so the module itself stays readable.
+[CHANGELOG.md](../CHANGELOG.md) records the bugs that prompted several of them.
+
+### Places API (New) only
+
+The legacy `google.maps.places.Autocomplete` path was removed in 1.2 and must not come back. It
+rendered as an ordinary text box with no error — the worst failure mode available — and Google no
+longer enables the legacy Places API for newly issued keys. A missing `PlaceAutocompleteElement`
+therefore surfaces as an error banner, never as a silent downgrade.
+
+### `places` is the only library imported
+
+Nothing may reference `google.maps.Circle`, `LatLngBounds`, or anything else from `maps` or
+`core`. They are `undefined`, and a reference inside an async callback — a geolocation success
+handler, say — throws where nothing catches or logs it. That is exactly how the location bias was
+silently broken before 1.2, and why `applyGeolocationBias()` assigns a plain `CircleLiteral`
+(`{center, radius}`) rather than constructing a `Circle`.
+
+### Nothing reaches global scope, and nothing carries a fixed DOM id
+
+All behaviour lives inside one IIFE per set, and the API key is passed to the bootstrap loader as
+an IIFE argument rather than parked on `window`. A collision with another module on the same page
+is the failure mode this avoids.
+
+Every element id is built from `autocompletePrefix` (`googleSearch_<set index>_`), which is unique
+per set; the wrapper is found by the class `.gaa-location-field`. Several sets can share a page,
+and a repeated id is invalid HTML that makes every lookup resolve to the first match — set B would
+write into set A's fields. A fixed `#locationField` was exactly that bug.
+
+The prefix uses the **configured** position of the set, not its position among the sets that
+qualified on the current page, so a set's ids stay stable however the others are scoped.
+
+### Destination fields load disabled
+
+Destination fields are `disabled` on load and re-enabled individually as each receives a value.
+That prevents manual edits and ensures REDCap saves only autocomplete-populated values. A disabled
+input is not submitted, so anything that writes a value **must** also enable its element:
+
+- every write goes through `updateAndEnable()`, never a bare `updateValue()`;
+- every clear goes through `clearAndEnable()`, which enables only when the field actually held
+  something. A blank has to reach the record only when it overwrites a value, and enabling
+  unconditionally made the whole address hand-editable after one selection.
+
+Latitude and longitude are the ones to watch: they are the only destinations resolved by field
+*name* rather than by `googleSearch_*` id, which is how they came to be written without ever being
+enabled. `fieldElement()` resolves both kinds, so `updateAndEnable()` does not need to know which
+it was handed.
+
+Known limitation, deliberately not fixed: a field enabled by one fill stays enabled for the rest
+of the page.
+
+### Failure degrades, never blocks
+
+`showAutocompleteError()` un-hides the original input, prepends a red banner and re-enables the
+destination fields. `degradeToManualEntry()` handles the harder case of a widget that reached the
+DOM and then became unusable: it rescues the typed text into the source field, removes the widget,
+then hands off to `showAutocompleteError()`.
+
+The rescue is gated on `fieldHoldsSelectedAddress`, not on the source field being empty. On an
+edit form that field arrives pre-populated with the address saved last time, so "is it empty"
+discarded the participant's typed text and revealed the stale address instead. The only value
+worth protecting is one *this session's* autocomplete wrote.
+
+Both paths deliberately leave the destination fields holding their previously saved components —
+the module has no idea what the right ones are, and unlocking them lets the participant correct
+them.
+
+### `gmp-error` tolerates a burst before degrading
+
+Three denied requests within ten seconds, the count reset at the top of the `gmp-select` handler
+and never on `input`. Degrading on the first error made a momentary denial permanent.
+
+The window is not optional. `gmp-select` needs the participant to actually pick something, so
+without a window three unrelated blips minutes apart would add up to a degrade. The reset happens
+*before* the `await`: a served-and-chosen prediction is the proof that Google answered, not
+`fetchFields()` succeeding afterwards.
+
+The event carries no documented, stable indication of *why* a request was denied, so a permanent
+cause cannot be distinguished from a transient one here. Do not "improve" this by branching on a
+guessed detail property — a condition that is silently never true reads like working code forever.
+
+### `subpremise` is not a component
+
+`componentForm` doubles as the registry of "components with a destination element", and every
+entry is cleared through `updateValue(autocompletePrefix + type)` on each selection. No
+`googleSearch_*subpremise` element exists, so an entry would only log "Could not find the element"
+every time. `extractUnitParts()` handles the unit instead, walking the raw component list
+independently, and `applyUnitFromComponents()` runs *after* the component loop so that `3/27`
+overwrites the bare street number that loop just wrote.
+
+### Settings are baked in, and escaped once
+
+Settings are compiled into the IIFE at emit time rather than read at runtime, so an unconfigured
+feature emits no code and cannot misfire. Every value emitted into JavaScript goes through
+`jsValue()`, `jsArray()` or `jsObject()`:
+
+- they fall back to `""`, `[]` and `{}` when `json_encode()` fails, because `var x = ;` is a
+  syntax error that kills the whole IIFE and leaves a plain text box on the form;
+- they apply `JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT`. `JSON_HEX_TAG` is the
+  one that matters: it stops a `</script>` sequence inside a setting value closing the block early.
+
+Do **not** use `htmlspecialchars()` for this. These values land in a *JavaScript* string context,
+and HTML entities are not decoded inside `<script>`, so html-escaping corrupts the value rather
+than protecting it. That was a real bug in the API key emit.
+
+Field names reach JavaScript as data, never as selector text: the component field names are
+emitted as the `destinationFields` JSON object, and every lookup goes through `byName()`, which
+escapes quotes and backslashes for the attribute selector.
+
+### Address field sets
+
+The field mappings live in a repeatable `sub_settings` group (`address-set`), read with
+`getSubSettings('address-set', $project_id)`.
+
+- `repeatable: true` goes on the `sub_settings` **parent**, never on the children.
+- Child keys are stored **flat and globally**. `set-city` is one top-level parallel array across
+  all instances, so every child key must be unique across the whole `config.json` — hence the
+  `set-` prefix. Reusing a key silently shares storage with whatever else holds it.
+- Never assume a child key exists. One added to `config.json` after a project was configured
+  simply does not appear in the returned instance array, so every read is `$set['set-x'] ?? ''`.
+  The `sparse-missing-keys` fixture exists for exactly this.
+- Do not rename a child key without a migration. An old scalar value read as an instance array
+  gets string-offset into single characters (`"addr1"[0] === "a"`), which corrupts silently rather
+  than failing.
+- The API key, the bootstrap loader and the privacy notice are project-wide rather than per set:
+  the Maps API can only be bootstrapped once per page, so a second key would be silently ignored.
+
+### The privacy notice is a compliance control
+
+The module relays participant keystrokes to a third party overseas, so the disclosure shows by
+*default* and an administrator must deliberately suppress it. It is inserted with `.text()`, never
+`.html()`, and `addPrivacyNotice()` is called only from the success path — if the widget never
+loads, nothing reaches Google and there is nothing to disclose.
+
+### Framework version
+
+`config.json` declares framework version 16, which requires REDCap 14.6.4+ (LTS 15.0.9). Nothing
+depends on 16 specifically; framework **13** is the real floor, because that is where
+`getSubSettings()` began including `hidden` settings.
+
+Two consequences bind together and must not be split: `config.json` carries no `permissions`
+block (deprecated, and required absent from v12 onward), and hook methods must be named `redcap_*`
+— the legacy `hook_*` names do not fire. Changing one without the other silently disables the
+module.
 
 ## Documentation layout
 

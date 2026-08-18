@@ -11,15 +11,51 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
-## [Unreleased]
+## [1.0.2] - 2026-08-18
 
 ### Added
+
+- **A "Design notes" section in `docs/development.md`.** It collects the reasoning that used to
+  sit in the code as commentary: the Places API (New) decision, the single-library rule, the
+  no-globals and no-fixed-id invariants, the disabled-destination-field contract behind
+  `updateAndEnable()` / `clearAndEnable()`, the `gmp-error` burst window, the
+  `fieldHoldsSelectedAddress` guard on the degrade path, the `subpremise` exclusion, the
+  settings-escaping rules, the sub-settings storage model, and the framework-version coupling.
+  Written for a reviewer rather than for a maintainer mid-edit.
 
 - **`docs/execution-flow.md`** — a phase-by-phase trace of how the module runs, from the REDCap
   page hook through to a chosen address landing in the mapped fields, with a diagram per phase.
   Linked from the README. Documentation only; no behaviour change.
 
 ### Changed
+
+- **The commentary in the code is cut back to short "why" notes.** The External Modules Framework
+  Team declined the submission because the volume of commentary made the module hard to review,
+  and the measurements bore that out: `Google_Address_Autocomplete.php` was 1,098 lines of which
+  470 (43%) were comments, and **54% of the bytes the module injected into every page were
+  JavaScript comments** — around 20 KB per address field set, per page load.
+
+  The file is now 794 lines with 161 comment lines (20%), and a single-set page carries 25.6 KB of
+  inline script instead of 37.1 KB — a 31% cut to what every participant downloads, and 40% on a
+  two-set page. What went: docblocks narrating bug history that `CHANGELOG.md` already records,
+  paragraphs justifying a decision to an absent reader, and comments restating the line beneath
+  them. What stayed, shortened: the notes that stop a plausible wrong edit — `JSON_HEX_TAG`,
+  `json_encode` rather than `htmlspecialchars`, the nowdoc, the `byName()` selector escape, the
+  `subpremise` exclusion, the closed-shadow-root `input` listener, the `CircleLiteral`, the
+  "guard only" ordering hazard in `degradeToManualEntry()`, and the four heuristics inside
+  `recoverUnitFromText()`. The rationale itself is not lost; it moved to **Design notes** in
+  `docs/development.md`.
+
+  No behaviour changed. The golden-output harness was byte-identical across the PHP-side pass, and
+  the emitted code was compared line by line against the pre-change output afterwards: the only
+  non-comment differences are the two trailing comments removed from `return;` and `$field.show();`
+  and the console call noted below.
+
+- **`README.md` is aimed at project administrators rather than developers.** The framework-16
+  explanation moved to `docs/installation.md` where it already had a home, the release and
+  directory-naming note moved to `docs/development.md`, and the **Development** and
+  **Execution flow** links moved out of the documentation table into a single closing line, so the
+  table a project administrator reads now lists only the six pages written for them.
 
 - **The documentation is split into a `docs/` set, and `README.md` is now a landing page.** The
   README had grown to 467 lines serving four unrelated audiences in one scroll — installer,
@@ -32,6 +68,8 @@ releasing, rename the deployment directory and tag the commit to match the versi
   from the places that previously repeated it, and the longest reference tables sit in
   `<details>` blocks so a page opens short. The troubleshooting tables are deliberately left
   uncollapsed — GitHub's in-page find does not match text inside a closed `<details>`.
+
+  (Superseded in part by the README pass above, which trimmed the landing page further.)
 
   One heading lost its leading emoji: `⚠️ Never map two settings to the same REDCap field`
   became a plain heading with the warning in the body, because a leading emoji shifts GitHub's
@@ -59,6 +97,14 @@ releasing, rename the deployment directory and tag the commit to match the versi
   `12` would have yielded `1`. Documentation only; the parser is unchanged and every row in the
   table was re-verified against it.
 
+- **The deployment instructions listed only two of the four files the module needs.**
+  `README.md` and `docs/installation.md` both said to copy `Google_Address_Autocomplete.php` and
+  `config.json`, but the module class has required `AddressComponent.php` and
+  `AddressFieldSet.php` since they were introduced. Following the instructions as written produced
+  a fatal on every survey and data entry page. All four files are now named, in the README quick
+  start, in `docs/installation.md` and in `docs/development.md`. The README also no longer
+  describes the module as single-file.
+
 - **The test harness files are namespaced, so REDCap's module security scan passes cleanly.**
   `tests/fixtures.php` and `tests/golden.php` declared functions and a constant in the global
   namespace, which the scan's `ExternalModules.Misc.RequireNamespace` rule reports as four errors —
@@ -68,6 +114,13 @@ releasing, rename the deployment directory and tag the commit to match the versi
   calls to built-ins such as `printf()` and `ob_start()` still resolve, because PHP falls back to
   the global namespace for functions and constants. Test-only; the module ships neither file, and
   all 15 golden fixtures remain byte-identical.
+
+### Removed
+
+- **One console message on the happy path.** `console.log('Using Places API (New) …')` was written
+  on every page load, for every address field set, whether or not anything was wrong. The warnings
+  and errors that report an actual problem are all unchanged, including the geolocation notice,
+  which explains why predictions are not location-biased.
 
 ## [1.0.1] - 2026-08-03
 
@@ -278,5 +331,6 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.2]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.2
 [1.0.1]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.1
 [1.0.0]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.0

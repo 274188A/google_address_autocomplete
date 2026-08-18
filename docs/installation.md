@@ -26,7 +26,8 @@ Framework 16 is declared to keep the module installable on current LTS instances
 
 ## Steps
 
-1. Copy `Google_Address_Autocomplete.php` and `config.json` into your REDCap modules directory:
+1. Copy the module's four files — `Google_Address_Autocomplete.php`, `AddressComponent.php`,
+   `AddressFieldSet.php` and `config.json` — into your REDCap modules directory:
 
    ```
    redcap/modules/<module_name>_v<version>/
