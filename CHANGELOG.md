@@ -11,6 +11,38 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
+## [1.0.3] - 2026-08-18
+
+### Changed
+
+- **The remaining comments that restated their own code are gone.** 1.0.2 cut the commentary for
+  verbosity — history narration, paragraphs arguing a decision to an absent reader. It did not
+  apply the other test: *does the code below already answer this?* Around 45 comment lines did not
+  survive it. `/** The disclosure shown under every widget. */` sat over a three-line
+  `resolvePrivacyNotice()`; `// Disabled until a prediction is chosen` sat over
+  `setDestinationFieldsDisabled(true)`; `// No place selected — clear the original field and
+  lat/lng` sat over an `else` branch doing exactly that. Two comments duplicated the `log()`
+  message on the very next line.
+
+  `Google_Address_Autocomplete.php` is now **735 lines with 102 comment lines (14%)**, from 794 /
+  161 (20%) in 1.0.2 and 1,098 / 470 (43%) in 1.0.1. `AddressFieldSet.php` is 103 / 14 and
+  `AddressComponent.php` 56 / 12. A single-set page now carries **22.7 KB of inline script**,
+  against 25.6 KB in 1.0.2 and 37.1 KB in 1.0.1 — a **39% reduction** in what every participant
+  downloads, and 40% on a two-set page.
+
+  What remains states something the code cannot: a framework behaviour (sub-settings stored flat,
+  so a new child key is simply absent), a rejected alternative (`json_encode` not
+  `htmlspecialchars`; a `CircleLiteral` not `google.maps.Circle`), an ordering hazard ("guard only
+  — do not set `autocompleteFailed` here"), a cross-function contract (writes go through
+  `updateAndEnable()` or REDCap never receives the value), or why a literal has the value it has
+  (`MAX_CONSECUTIVE_ERRORS`, `ERROR_BURST_WINDOW_MS`). The four heuristic notes inside
+  `recoverUnitFromText()` stay: each maps onto a pinned assertion in `tests/unit.test.mjs`.
+
+  No behaviour changed, and this time nothing at all changed but comments. The PHP-side pass left
+  the emitted markup byte-identical, and the pass over the emitted JavaScript was compared against
+  the pre-change output with comments stripped: zero code differences across all 15 fixtures,
+  where 1.0.2 had three expected ones.
+
 ## [1.0.2] - 2026-08-18
 
 ### Added
@@ -331,6 +363,7 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.3]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.3
 [1.0.2]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.2
 [1.0.1]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.1
 [1.0.0]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.0

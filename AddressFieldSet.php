@@ -1,11 +1,8 @@
 <?php namespace johnbarrett\Google_Address_Autocomplete;
 
 /**
- * One configured address field set: a search box and the REDCap fields it fills.
- *
- * REDCap hands sub-settings back as a plain array per configured set. This turns one of
- * those into a checked, named shape once, at the boundary. Readonly because a set is
- * configuration — read many times while emitting a page, never modified.
+ * One configured address field set. REDCap hands sub-settings back as a plain array per
+ * set; this turns one of those into a checked, named shape once, at the boundary.
  */
 final readonly class AddressFieldSet
 {
@@ -14,9 +11,7 @@ final readonly class AddressFieldSet
 		public int $index,
 		public string $description,
 		public bool $disabled,
-		/** Instruments this set applies to. Empty means "any form with the source field". */
 		public array $forms,
-		/** The field the search box attaches to. A set without one is not configured. */
 		public string $autocomplete,
 		public string $streetNumber,
 		public string $street,
@@ -34,12 +29,9 @@ final readonly class AddressFieldSet
 	) {}
 
 	/**
-	 * Build a set from one raw REDCap sub-setting array.
-	 *
 	 * Sub-settings are stored flat, one parallel array per child key, so a key added to
 	 * config.json after a project was configured is simply absent from the array REDCap
-	 * returns. No parameter here may become required, or a routine settings addition
-	 * becomes a fatal on already-configured projects.
+	 * returns. No parameter here may become required.
 	 */
 	public static function fromSubSetting(array $raw, int $index): self
 	{
@@ -66,7 +58,6 @@ final readonly class AddressFieldSet
 		);
 	}
 
-	/** A missing key and a key holding whitespace both mean "not mapped". */
 	private static function text(array $raw, string $key): string
 	{
 		return trim((string)($raw[$key] ?? ''));
@@ -83,7 +74,6 @@ final readonly class AddressFieldSet
 		return array_values(array_filter($forms, static fn(string $form): bool => $form !== ''));
 	}
 
-	/** A set with no source field was added in the configuration dialog but never filled in. */
 	public function isActive(): bool
 	{
 		return !$this->disabled && $this->sourceKey() !== '';
@@ -95,13 +85,11 @@ final readonly class AddressFieldSet
 		return trim($this->autocomplete);
 	}
 
-	/** No configured instrument means "any form with the source field"; the script guards that. */
 	public function appliesTo(string $instrument): bool
 	{
 		return !$this->forms || in_array($instrument, $this->forms, true);
 	}
 
-	/** How this set identifies itself in the browser console. */
 	public function label(): string
 	{
 		return '#' . ($this->index + 1) . ($this->description !== '' ? ' ' . $this->description : '');

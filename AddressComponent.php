@@ -1,17 +1,12 @@
 <?php namespace johnbarrett\Google_Address_Autocomplete;
 
 /**
- * A Google address component the module can write into a REDCap field. Both the PHP
- * destination-field map and the emitted componentForm map are generated from here, so
- * the two cannot drift apart.
- *
  * The case value is the Google component type, which doubles as the googleSearch_*
- * element-id suffix. Latitude and longitude are not cases: they are looked up by field
- * name instead, so they are emitted separately.
+ * element-id suffix. Latitude and longitude are not cases: they are found by field name.
  *
- * Do not add subpremise. componentForm doubles as the registry of components that have
- * a destination element, and every entry is cleared on each selection, so an entry with
- * no element would only log "Could not find the element". extractUnitParts() handles it.
+ * Do not add subpremise. componentForm doubles as the registry of components that have a
+ * destination element, and no googleSearch_*subpremise element is ever created, so an
+ * entry would only log "Could not find the element". extractUnitParts() handles the unit.
  */
 enum AddressComponent: string
 {
@@ -24,7 +19,6 @@ enum AddressComponent: string
 	case Country      = 'country';
 	case PlaceName    = 'place_name';
 
-	/** The AddressFieldSet property holding this component's REDCap field name. */
 	public function property(): string
 	{
 		return match ($this) {
@@ -40,11 +34,8 @@ enum AddressComponent: string
 	}
 
 	/**
-	 * The Place API property to read off the component — the value side of componentForm.
-	 *
-	 * Null means "not an address component": place_name comes from place.displayName, so
-	 * it must never appear in componentForm. fillInAddress() clears and refills it
-	 * explicitly, so a name captured for one selection cannot stay on a different address.
+	 * Null means "not an address component": place_name comes from place.displayName, so it
+	 * must never appear in componentForm. fillInAddress() clears and refills it explicitly.
 	 */
 	public function format(): ?string
 	{
@@ -55,7 +46,6 @@ enum AddressComponent: string
 		};
 	}
 
-	/** The cases that belong in componentForm, i.e. those read from addressComponents. */
 	public static function addressComponents(): array
 	{
 		return array_values(array_filter(
