@@ -67,7 +67,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 			// IIFE still guards client-side.
 			if (!$set->appliesTo((string)$instrument)) { continue; }
 
-			$source = $set->sourceKey();
+			$source = $set->autocomplete;
 			if (isset($claimedSources[$source])) {
 				$this->log(sprintf(
 					'Address Autocomplete: skipped set #%d on instrument "%s" because its '
@@ -231,9 +231,16 @@ SCRIPT;
 			};
 
 			$(document).ready(function() {
-				// Fallback for a set with no instrument scope configured server-side.
+				// Fallback for a set with no instrument scope configured server-side. Also
+				// the one place a set that qualified server-side can fail, so it warns: the
+				// usual cause is the set being scoped to an instrument that does not carry
+				// the Autocomplete Field.
 				var $autocompleteField = byName(autocompleteFieldName);
 				if ($autocompleteField.length === 0) {
+					console.warn(logPrefix + 'Autocomplete Field "' + autocompleteFieldName +
+						'" is not on this page, so this address field set does nothing here. ' +
+						'Check that the field name is right and that this set is scoped to ' +
+						'the instrument the field is actually on.');
 					return;
 				}
 

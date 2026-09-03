@@ -11,6 +11,30 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
+## [1.0.4] - 2026-09-03
+
+### Added
+
+- **A set that finds no Autocomplete Field on the page now says so in the console.** This was the
+  module's one silent failure. A set that passes every server-side check — enabled, has a source
+  field, scoped to this instrument — can still find no matching element when `$(document).ready`
+  runs, and the early return took that path without a word. Nothing in **View logs** either, since
+  the server saw a perfectly valid set. The usual cause is a set scoped to one instrument while its
+  Autocomplete Field lives on another, which is easy to do and, until now, showed up only as a
+  second address box that quietly did nothing. The warning names the field and the likely fix.
+
+### Fixed
+
+- **A trailing space in the Autocomplete Field no longer breaks a set silently.** Every other field
+  name was trimmed on the way in; this one was deliberately left untrimmed on the grounds that it is
+  emitted as the lookup name and must match exactly. But `isActive()` and the duplicate-source check
+  both compared a trimmed copy via `sourceKey()`, so `"my_field "` passed validation, was emitted
+  untrimmed, and then matched no element — the same invisible dead-end as above. The value is now
+  trimmed once at the boundary like every other field name, which makes the two comparisons and the
+  emitted name agree; `sourceKey()` had nothing left to do and is gone.
+
+---
+
 ## [1.0.3] - 2026-08-18
 
 ### Changed
@@ -363,6 +387,7 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.4]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.4
 [1.0.3]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.3
 [1.0.2]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.2
 [1.0.1]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.1

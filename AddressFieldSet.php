@@ -40,8 +40,9 @@ final readonly class AddressFieldSet
 			description:  self::text($raw, 'set-description'),
 			disabled:     !empty($raw['set-disabled']),
 			forms:        self::formList($raw, 'set-form'),
-			// Not trimmed: emitted as the lookup name, so it must match exactly.
-			autocomplete: (string)($raw['set-autocomplete'] ?? ''),
+			// Trimmed like every other field name: a trailing space typed into the setting
+			// would otherwise pass every server-side check and then match no element.
+			autocomplete: self::text($raw, 'set-autocomplete'),
 			streetNumber: self::text($raw, 'set-street-number'),
 			street:       self::text($raw, 'set-street'),
 			city:         self::text($raw, 'set-city'),
@@ -76,13 +77,7 @@ final readonly class AddressFieldSet
 
 	public function isActive(): bool
 	{
-		return !$this->disabled && $this->sourceKey() !== '';
-	}
-
-	/** The source field trimmed, for identity comparisons only. */
-	public function sourceKey(): string
-	{
-		return trim($this->autocomplete);
+		return !$this->disabled && $this->autocomplete !== '';
 	}
 
 	public function appliesTo(string $instrument): bool
