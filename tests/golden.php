@@ -37,7 +37,7 @@ function gaa_render(array $fixture): string {
 	try {
 		// Entered through the REDCap hook rather than the internal method, so the
 		// fixtures exercise the same entry point the framework uses.
-		$module->redcap_data_entry_form(1, '1', $fixture['instrument'], 1, null, 1);
+		$module->redcap_data_entry_form(1, '1', $fixture['instrument'], array_key_exists('event', $fixture) ? $fixture['event'] : 1, null, 1);
 	} finally {
 		$output = ob_get_clean();
 	}

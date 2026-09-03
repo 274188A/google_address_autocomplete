@@ -4,8 +4,12 @@
  * Settings scenarios for the golden-output harness.
  *
  * Each fixture is: a name, the project-wide settings, the 'address-set'
- * sub-settings, and the instrument being rendered. The harness feeds these to
- * the module and captures what it echoes.
+ * sub-settings, the instrument being rendered, and optionally the event id it is
+ * rendered at ('event', defaulting to 1). The harness feeds these to the module
+ * and captures what it echoes.
+ *
+ * gaa_full_set() deliberately carries no 'set-event' key, so every fixture built
+ * from it keeps exercising the absent-key path that sparse-missing-keys guards.
  *
  * A fully populated set, used as the base for scenarios that only vary one
  * thing. Sub-settings arrive from REDCap as one array per configured set.
@@ -168,6 +172,45 @@ function gaa_fixtures(): array {
 			'project'    => $baseProject,
 			'sets'       => [['set-form' => []] + $full],
 			'instrument' => 'any_form_at_all',
+		],
+		// Event scoping. The event ids are strings on the configured side, as REDCap
+		// stores them, and an int on the hook side — the mismatch appliesToEvent() has
+		// to absorb.
+		'event-matched' => [
+			'project'    => $baseProject,
+			'sets'       => [['set-event' => ['2']] + $full],
+			'instrument' => 'demographics',
+			'event'      => 2,
+		],
+		'event-scoped-out' => [
+			'project'    => $baseProject,
+			'sets'       => [['set-event' => ['2']] + $full],
+			'instrument' => 'demographics',
+			'event'      => 7,
+		],
+		'blank-event-scope-any-event' => [
+			'project'    => $baseProject,
+			'sets'       => [['set-event' => []] + $full],
+			'instrument' => 'demographics',
+			'event'      => 99,
+		],
+		// The instrument matches but the event does not. The set must be filtered before
+		// the source dedup, so a set scoped out here never claims 'addr_full'.
+		'form-matches-event-does-not' => [
+			'project'    => $baseProject,
+			'sets'       => [
+				['set-event' => ['2'], 'set-description' => 'Baseline'] + $full,
+				['set-event' => ['3'], 'set-description' => 'Follow-up'] + $full,
+			],
+			'instrument' => 'demographics',
+			'event'      => 3,
+		],
+		// No event on the page at all against a set that names one: scoped out.
+		'null-event-id' => [
+			'project'    => $baseProject,
+			'sets'       => [['set-event' => ['2']] + $full],
+			'instrument' => 'demographics',
+			'event'      => null,
 		],
 		'no-api-key' => [
 			'project'    => ['google-api-key' => ''] + $baseProject,

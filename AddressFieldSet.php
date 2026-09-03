@@ -12,6 +12,8 @@ final readonly class AddressFieldSet
 		public string $description,
 		public bool $disabled,
 		public array $forms,
+		/** Numeric REDCap event ids, as strings. Empty means every event. */
+		public array $events,
 		public string $autocomplete,
 		public string $streetNumber,
 		public string $street,
@@ -39,7 +41,8 @@ final readonly class AddressFieldSet
 			index:        $index,
 			description:  self::text($raw, 'set-description'),
 			disabled:     !empty($raw['set-disabled']),
-			forms:        self::formList($raw, 'set-form'),
+			forms:        self::stringList($raw, 'set-form'),
+			events:       self::stringList($raw, 'set-event'),
 			// Trimmed like every other field name: a trailing space typed into the setting
 			// would otherwise pass every server-side check and then match no element.
 			autocomplete: self::text($raw, 'set-autocomplete'),
@@ -64,15 +67,22 @@ final readonly class AddressFieldSet
 		return trim((string)($raw[$key] ?? ''));
 	}
 
-	/** A repeatable form-list, which REDCap returns as a bare scalar for a single entry. */
-	private static function formList(array $raw, string $key): array
+	/**
+	 * A child-level repeatable list (REDCap's multi-value picker, not instance repetition),
+	 * which comes back as a bare scalar when only one entry is chosen.
+	 *
+	 * Everything is cast to string. That is what lets appliesToEvent() compare strictly: an
+	 * event-list stores numeric ids, and the hook hands us an int, so without this the two
+	 * sides would never match.
+	 */
+	private static function stringList(array $raw, string $key): array
 	{
-		$forms = $raw[$key] ?? [];
-		if (!is_array($forms)) { $forms = [$forms]; }
+		$values = $raw[$key] ?? [];
+		if (!is_array($values)) { $values = [$values]; }
 
-		$forms = array_map(trim(...), array_map(strval(...), $forms));
+		$values = array_map(trim(...), array_map(strval(...), $values));
 
-		return array_values(array_filter($forms, static fn(string $form): bool => $form !== ''));
+		return array_values(array_filter($values, static fn(string $value): bool => $value !== ''));
 	}
 
 	public function isActive(): bool
@@ -83,6 +93,16 @@ final readonly class AddressFieldSet
 	public function appliesTo(string $instrument): bool
 	{
 		return !$this->forms || in_array($instrument, $this->forms, true);
+	}
+
+	/**
+	 * Blank scope means every event, which is what keeps classic projects and every set
+	 * configured before this setting existed working unchanged. Strict comparison is safe
+	 * because stringList() normalised the configured side to string and the caller casts.
+	 */
+	public function appliesToEvent(string $eventId): bool
+	{
+		return !$this->events || in_array($eventId, $this->events, true);
 	}
 
 	public function label(): string

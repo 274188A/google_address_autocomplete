@@ -13,13 +13,13 @@
 		</style>
 				<script>
 		(function() {
-			var autocompletePrefix = "googleSearch_0_";
+			var autocompletePrefix = "googleSearch_1_";
 			var autocompleteFieldName = "addr_full";
 
-			var logPrefix = '[Address Autocomplete ' + "#1 Home address" + '] ';
+			var logPrefix = '[Address Autocomplete ' + "#2 Follow-up" + '] ';
 
 			// One JSON object rather than a selector per field, so nothing lands unescaped.
-			var destinationFields = {"street_number":"addr_number","route":"addr_street","locality":"addr_city","administrative_area_level_2":"addr_county","administrative_area_level_1":"addr_state","postal_code":"addr_zip","country":"addr_country"};
+			var destinationFields = {"street_number":"addr_number","route":"addr_street","locality":"addr_city","administrative_area_level_2":"addr_county","administrative_area_level_1":"addr_state","postal_code":"addr_zip","country":"addr_country","place_name":"addr_place"};
 			var latitudeFieldName  = "addr_lat";
 			var longitudeFieldName = "addr_lng";
 
@@ -529,13 +529,29 @@
 					}
 
 					applyUnitFromComponents(place.addressComponents, $field);
-									} else {
+					
+					// place_name is not in componentForm, so the clear loop above does not reach
+					// it. Refilling unconditionally stops a name captured for an earlier
+					// selection staying attached to a different address.
+					var placeNameId = autocompletePrefix + 'place_name';
+					if (document.getElementById(placeNameId)) {
+						clearAndEnable(placeNameId);
+						if (place.displayName) {
+							updateAndEnable(placeNameId, place.displayName);
+						}
+					}
+				} else {
 					$field.val('');
 					$field.change();
 					fieldHoldsSelectedAddress = false;
 					clearAndEnable('latitude');
 					clearAndEnable('longitude');
-									}
+					
+					var clearedPlaceNameId = autocompletePrefix + 'place_name';
+					if (document.getElementById(clearedPlaceNameId)) {
+						clearAndEnable(clearedPlaceNameId);
+					}
+				}
 
 				if (typeof doBranching === 'function') { doBranching(); }
 			}

@@ -15,6 +15,25 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ### Added
 
+- **Address field sets can now be scoped to events, not just instruments.** On a longitudinal
+  project an instrument is designated to several events, and a set scoped to that instrument was
+  emitted at *every* one of them with no way to narrow it. A new **Event(s) this set applies to**
+  picker sits beside the instrument picker and works the same way: repeatable, and blank means
+  every event. Instrument and event are independent filters — a set is emitted only where both
+  match, and either is ignored when left blank, so every existing configuration behaves exactly
+  as it did.
+
+  Two details worth knowing. The event filter runs **before** the duplicate-source check, which
+  matters once two sets can share an instrument and differ only by event: checked the other way
+  round, the set belonging to another event would claim the source field first and the set that
+  belongs on the page would be skipped and logged as a duplicate. And the picker is hidden on
+  classic projects via `redcap_module_configuration_settings` rather than `branchingLogic`, which
+  the framework documents as unreliable inside `sub_settings`. That hiding is **cosmetic only** —
+  `getSubSettings()` still returns hidden values, so a stored event scope keeps applying either
+  way. A set that points at a deleted event, or a project converted from longitudinal to classic,
+  will therefore stop appearing with nothing in the log; both cases are in
+  [Troubleshooting](docs/troubleshooting.md).
+
 - **A set that finds no Autocomplete Field on the page now says so in the console.** This was the
   module's one silent failure. A set that passes every server-side check — enabled, has a source
   field, scoped to this instrument — can still find no matching element when `$(document).ready`
@@ -22,6 +41,11 @@ releasing, rename the deployment directory and tag the commit to match the versi
   the server saw a perfectly valid set. The usual cause is a set scoped to one instrument while its
   Autocomplete Field lives on another, which is easy to do and, until now, showed up only as a
   second address box that quietly did nothing. The warning names the field and the likely fix.
+
+### Changed
+
+- **The "field is not on this page" console warning now mentions the event.** It named only the
+  instrument as the likely cause, which is no longer the whole story on a longitudinal project.
 
 ### Fixed
 

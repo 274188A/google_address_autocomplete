@@ -18,6 +18,10 @@ integer or number validation on that field will reject it. See
 scoped to, and even where it is emitted, the script exits early if its autocomplete field is not
 on the form being viewed.
 
+**Longitudinal projects are too.** A set can also be scoped to one or more events, so the same
+instrument can carry a different address set at baseline and at follow-up. Blank means every
+event, which is what classic projects and every set configured before this existed rely on.
+
 ### Never map two settings to the same REDCap field
 
 > ⚠️ **This one fails silently.** Nothing errors, nothing is logged within a set — a mapped
@@ -30,7 +34,7 @@ field the later assignment wins and the other setting silently stops working. Th
 
 This applies **within** a set and **across** sets that appear on the same page. Two sets must
 each have their own destination fields — a shared field is logged as a warning but will still
-be overwritten. Sets on different instruments cannot collide.
+be overwritten. Sets on different instruments — or different events — cannot collide.
 
 ## Address field sets
 
@@ -58,6 +62,7 @@ page down with it.
 | Set has no **Autocomplete Field** | Skipped silently — an added-but-unfilled set is not an error. |
 | Set is disabled | Skipped. |
 | Set is scoped to other instruments | Not emitted on this page. |
+| Set is scoped to other events | Not emitted at this event. Checked before the two collision rules below, so a set belonging to another event never takes a field from the set that belongs here. |
 | Two sets on one page share an **Autocomplete Field** | The later set is skipped and logged. Both would try to take over the same input. |
 | Two sets on one page write to the same destination field | Both are emitted, and a warning is logged. One will overwrite the other — fix the mapping. |
 

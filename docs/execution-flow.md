@@ -23,17 +23,17 @@ a disabled input is not submitted — skipping that would silently save blanks.
 ## Phase 1 — Server-side render (PHP)
 
 Runs once per page. Bails early if there is no API key or no set that applies to
-this instrument. Everything shared — the Google Maps bootstrap loader, the
+this instrument and event. Everything shared — the Google Maps bootstrap loader, the
 styles, the privacy notice — is emitted at most **once**, no matter how many
 sets qualify.
 
 ```mermaid
 flowchart TD
-    A["REDCap page hook fires<br/>survey page or data entry form"] --> B["addAddressAutoCompletion()<br/>given project and instrument"]
+    A["REDCap page hook fires<br/>survey page or data entry form"] --> B["addAddressAutoCompletion()<br/>given project, instrument and event"]
     B --> C{"Google API key set?"}
     C -- no --> X1(["Stop — nothing emitted"]):::exit
-    C -- yes --> D["getActiveSets()<br/>filter, scope, dedupe sources"]
-    D --> E{"Any active set<br/>for this instrument?"}
+    C -- yes --> D["getActiveSets()<br/>filter, scope by form + event, dedupe sources"]
+    D --> E{"Any active set<br/>for this instrument<br/>and event?"}
     E -- no --> X2(["Stop — nothing emitted"]):::exit
     E -- yes --> F["Emit loader, styles, privacy notice<br/>once per page, project-wide"]:::emit
     F --> G["emitSetScript() for each set<br/>one isolated IIFE each"]:::emit

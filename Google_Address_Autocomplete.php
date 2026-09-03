@@ -19,18 +19,60 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 	// Framework 12+ runs redcap_* methods automatically, so config.json carries no
 	// "permissions" block. The legacy hook_* names do not fire.
 	public function redcap_survey_page($project_id, $record, $instrument, $event_id, $group_id, $survey_hash, $response_id, $repeat_instance) {
-		$this->addAddressAutoCompletion($project_id, $instrument);
+		$this->addAddressAutoCompletion($project_id, $instrument, $event_id);
 	}
 
 	public function redcap_data_entry_form($project_id, $record, $instrument, $event_id, $group_id, $repeat_instance) {
-		$this->addAddressAutoCompletion($project_id, $instrument);
+		$this->addAddressAutoCompletion($project_id, $instrument, $event_id);
 	}
 
-	private function addAddressAutoCompletion($project_id, $instrument): void {
+	/**
+	 * Hides the per-set event picker on projects that have no events.
+	 *
+	 * branchingLogic would be the declarative way to do this, but the framework documents
+	 * known issues with it inside sub_settings, which is exactly where the setting lives, and
+	 * names this hook as the alternative. Cosmetic only: getSubSettings() still returns hidden
+	 * values, so a stored event keeps applying whether or not the picker is drawn.
+	 */
+	public function redcap_module_configuration_settings($project_id, $settings) {
+		// class_exists() keeps the hook inert outside REDCap; REDCap:: is the core class, not
+		// a framework method, so nothing in the test harness provides it.
+		if ($project_id === null || !class_exists('\REDCap') || \REDCap::isLongitudinal()) {
+			return $settings;
+		}
+
+		return $this->withoutEventSetting($settings);
+	}
+
+	/**
+	 * The array walk behind the hook above, split out so it is reachable without REDCap.
+	 *
+	 * @param array $settings The config as the framework hands it over: a list of setting
+	 *                        definitions, each sub_settings block nested under its parent.
+	 */
+	public function withoutEventSetting(array $settings): array {
+		foreach ($settings as $i => $setting) {
+			if (($setting['key'] ?? '') !== 'address-set') { continue; }
+
+			foreach ($setting['sub_settings'] ?? [] as $j => $subSetting) {
+				if (($subSetting['key'] ?? '') === 'set-event') {
+					unset($settings[$i]['sub_settings'][$j]);
+					// Reindexed because the dialog walks these positionally.
+					$settings[$i]['sub_settings'] = array_values($settings[$i]['sub_settings']);
+					break;
+				}
+			}
+			break;
+		}
+
+		return $settings;
+	}
+
+	private function addAddressAutoCompletion($project_id, $instrument, $event_id): void {
 		$key = $this->getProjectSetting('google-api-key', $project_id);
 		if (!$key) { return; }
 
-		$sets = $this->getActiveSets($project_id, $instrument);
+		$sets = $this->getActiveSets($project_id, $instrument, $event_id);
 		if (!$sets) { return; }
 
 		if ($this->getProjectSetting('import-google-api', $project_id)) {
@@ -46,7 +88,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 	}
 
 	/** @return AddressFieldSet[] A misconfigured set is skipped and logged, never fatal. */
-	private function getActiveSets($project_id, $instrument): array {
+	private function getActiveSets($project_id, $instrument, $event_id = null): array {
 		$sets = $this->getSubSettings('address-set', $project_id);
 		if (!is_array($sets)) { return []; }
 
@@ -66,6 +108,11 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 			// Blank scope means "any form containing the source field", which the emitted
 			// IIFE still guards client-side.
 			if (!$set->appliesTo((string)$instrument)) { continue; }
+
+			// Must stay ahead of the dedup below: two sets may legitimately share an
+			// instrument and its fields and differ only by event, and a set scoped out of
+			// this event must not claim the source field from the one that belongs here.
+			if (!$set->appliesToEvent((string)$event_id)) { continue; }
 
 			$source = $set->autocomplete;
 			if (isset($claimedSources[$source])) {
@@ -239,8 +286,9 @@ SCRIPT;
 				if ($autocompleteField.length === 0) {
 					console.warn(logPrefix + 'Autocomplete Field "' + autocompleteFieldName +
 						'" is not on this page, so this address field set does nothing here. ' +
-						'Check that the field name is right and that this set is scoped to ' +
-						'the instrument the field is actually on.');
+						'Check that the field name is right, and that this set is scoped to ' +
+						'the instrument — and on a longitudinal project the event — ' +
+						'the field is actually on.');
 					return;
 				}
 

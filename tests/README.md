@@ -6,9 +6,11 @@ Two harnesses, neither needing a REDCap server:
 |---|---|---|
 | Golden output (`golden.php`) | PHP | The emitted markup is byte-identical for identical settings |
 | Unit (`unit.test.mjs`) | Node | The pure JavaScript helpers still behave as they do today |
+| Config hook (`config-hook.php`) | PHP | The config dialog's event-picker removal walks the real `config.json` correctly |
 
 ```
 C:\tools\php85\php.exe tests/golden.php verify
+C:\tools\php85\php.exe tests/config-hook.php
 node --test tests/unit.test.mjs
 ```
 
@@ -39,7 +41,8 @@ C:\tools\php85\php.exe tests/golden.php verify
 | `stub/AbstractExternalModule.php` | ~40-line stand-in for the REDCap framework base class. Implements only `getProjectSetting()`, `getSubSettings()` and `log()` — the three methods the module calls. |
 | `extract.mjs` | Lifts a named JS function out of the PHP source for the unit tests. |
 | `unit.test.mjs` | The unit tests. |
-| `fixtures.php` | The settings scenarios. `gaa_full_set()` is a fully populated address set; the rest vary one thing from it. |
+| `fixtures.php` | The settings scenarios. `gaa_full_set()` is a fully populated address set; the rest vary one thing from it. A fixture may carry an `event` key (the event id it renders at, default 1); `null` is honoured rather than defaulted, since "no event" is itself a case. |
+| `config-hook.php` | Checks `withoutEventSetting()`, the array walk behind `redcap_module_configuration_settings`, against the real `config.json`. |
 | `golden.php` | Renders each fixture and captures or verifies. |
 | `golden/*.html` | Committed expected output. Regenerate with `capture` **only** when a change to the emitted markup is intended. |
 
@@ -48,7 +51,8 @@ scratch — delete them, don't commit them.
 
 ## What the fixtures cover
 
-One set / two sets; unit recovery on/off; lat-lng, place-name and prediction filters
+Event scoping (matched, scoped out, blank-means-any, form-matches-but-event-does-not, and a
+null event id); one set / two sets; unit recovery on/off; lat-lng, place-name and prediction filters
 mapped/unmapped; privacy notice default/custom/suppressed; bootstrap loader on/off; a disabled
 set; instrument scoping (matched, unmatched, and blank-means-any); missing API key; and both
 misconfiguration warnings (two sets sharing a source field, two sets sharing a destination field).
@@ -117,6 +121,15 @@ before you "fix" them:
   `componentForm` loop in `fillInAddress()`), so it is a module-wide convention and changing it is a
   behaviour change, not a test fix. If a real Google response is ever seen with the type in a later
   slot, that test is what should change — deliberately.
+
+`gaa_full_set()` deliberately carries **no** `set-event` key, so every fixture built from it
+keeps exercising the absent-key path alongside `sparse-missing-keys`.
+
+The `form-matches-event-does-not` fixture guards an ordering constraint rather than an
+output: two sets share an instrument and every field, differing only by event. The event
+filter runs before the duplicate-source check, so the set scoped out of this event never
+claims the source field. Were that order reversed, the surviving set would be skipped and
+logged as a duplicate — an empty page and a misleading log line.
 
 ## Scope
 

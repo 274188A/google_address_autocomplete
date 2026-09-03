@@ -215,6 +215,14 @@ The field mappings live in a repeatable `sub_settings` group (`address-set`), re
 - Do not rename a child key without a migration. An old scalar value read as an instance array
   gets string-offset into single characters (`"addr1"[0] === "a"`), which corrupts silently rather
   than failing.
+- `set-event` (`event-list`) scopes a set to events, alongside `set-form` for instruments.
+  Both are read through the same `stringList()` helper, which casts to string — an
+  event-list stores numeric ids while the hook passes an int, so an uncast strict
+  comparison would never match and would scope every set out on every page.
+- The event picker is hidden on classic projects by `redcap_module_configuration_settings`
+  rather than `branchingLogic`, which the framework documents as unreliable inside
+  `sub_settings`. That hiding is cosmetic: `getSubSettings()` still returns hidden values,
+  so a stored event scope keeps applying either way.
 - The API key, the bootstrap loader and the privacy notice are project-wide rather than per set:
   the Maps API can only be bootstrapped once per page, so a second key would be silently ignored.
 

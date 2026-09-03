@@ -78,6 +78,13 @@
 					"type": "form-list"
 				},
 				{
+					"key": "set-event",
+					"name": "Event(s) this set applies to<br><span class='fs11'>Longitudinal projects only — this setting is hidden on projects without events. Leave blank to apply to any event. Naming an event means nothing at all is emitted at the other events of the instrument above.</span>",
+					"required": false,
+					"repeatable": true,
+					"type": "event-list"
+				},
+				{
 					"key": "set-fields-header",
 					"name": "<div class='blue text-center'>Address components</div>",
 					"type": "descriptive"
