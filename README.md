@@ -56,6 +56,7 @@ Not working? Go straight to
 | [Installation](https://github.com/274188A/google_address_autocomplete/blob/main/docs/installation.md) | Deploying the module, or a change you deployed hasn't taken effect |
 | [Settings](https://github.com/274188A/google_address_autocomplete/blob/main/docs/settings.md) | Configuring a project — every setting, and what it does |
 | [Fields and address field sets](https://github.com/274188A/google_address_autocomplete/blob/main/docs/fields-and-sets.md) | Choosing which REDCap fields to map, or capturing more than one address |
+| [Longitudinal projects](https://github.com/274188A/google_address_autocomplete/blob/main/docs/longitudinal.md) | Your project has events, and you want a set at some of them but not others |
 | [How it behaves on the form](https://github.com/274188A/google_address_autocomplete/blob/main/docs/form-behaviour.md) | You want to know what the participant sees — and how unit/apartment numbers are recovered |
 | [Security and privacy](https://github.com/274188A/google_address_autocomplete/blob/main/docs/security-and-privacy.md) | **Before going live.** Locking down the API key, and the disclosure to participants |
 | [Troubleshooting](https://github.com/274188A/google_address_autocomplete/blob/main/docs/troubleshooting.md) | Something isn't working |

@@ -20,7 +20,8 @@ on the form being viewed.
 
 **Longitudinal projects are too.** A set can also be scoped to one or more events, so the same
 instrument can carry a different address set at baseline and at follow-up. Blank means every
-event, which is what classic projects and every set configured before this existed rely on.
+event, which is what classic projects and every set configured before this existed rely on. See
+[Longitudinal projects](longitudinal.md).
 
 ### Never map two settings to the same REDCap field
 
@@ -69,5 +70,6 @@ page down with it.
 ## Next
 
 - [How it behaves on the form](form-behaviour.md) — what the participant sees, and unit numbers
+- [Longitudinal projects](longitudinal.md) — scoping a set to events
 - [Troubleshooting](troubleshooting.md)
 - [Execution flow](execution-flow.md) — which sets are emitted, and what a selection writes where

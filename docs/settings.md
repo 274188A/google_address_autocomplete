@@ -48,7 +48,7 @@ Worth setting even on a single-set project.
 | Setting | Notes |
 |---|---|
 | **Instrument(s) this set applies to** | Repeating. Name the instrument this address lives on. Blank means "any form containing the Autocomplete Field". |
-| **Event(s) this set applies to** | Repeating, longitudinal projects only — hidden on projects without events. Blank means "any event". Use it when one instrument is designated to several events and the address is only wanted at some of them. |
+| **Event(s) this set applies to** | Repeating, longitudinal projects only — hidden on projects without events. Blank means "any event". Use it when one instrument is designated to several events and the address is only wanted at some of them. See [Longitudinal projects](longitudinal.md). |
 | **Name / description** | For your own reference. Also identifies the set in browser console messages, which is what makes two sets on one project debuggable. |
 | **Disable this address field set** | Checkbox, default off. Keeps the mapping but stops the search box appearing. |
 
