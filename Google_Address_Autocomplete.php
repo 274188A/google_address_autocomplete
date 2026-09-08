@@ -226,6 +226,15 @@ SCRIPT;
 				color: #666;
 				margin-top: 3px;
 			}
+			/* Only shown when the widget refuses a seeded value; see
+			   seedWidgetWithExistingAddress(). */
+			.gaa-location-field .gaa-existing-address {
+				font-size: 12px;
+				line-height: 1.4;
+				color: #333;
+				margin-bottom: 3px;
+			}
+			.gaa-location-field .gaa-existing-address span { font-weight: bold; }
 		</style>
 		<?php
 	}
@@ -255,19 +264,51 @@ SCRIPT;
 				return $('[name="' + String(name).replace(/["\\]/g, '\\$&') + '"]');
 			}
 
-			// Iterates destinationFields, not componentForm: that has no place_name entry
-			// and would leave the field stuck disabled.
+			// Built from destinationFields, not componentForm: that has no place_name entry
+			// and the field would be left stuck disabled.
+			function destinationFieldNames() {
+				var names = [];
+				$.each(destinationFields, function(componentType, fieldName) { names.push(fieldName); });
+				if (latitudeFieldName)  { names.push(latitudeFieldName); }
+				if (longitudeFieldName) { names.push(longitudeFieldName); }
+				return names;
+			}
+
 			function setDestinationFieldsDisabled(disabled) {
-				$.each(destinationFields, function(componentType, fieldName) {
+				$.each(destinationFieldNames(), function(i, fieldName) {
 					byName(fieldName).prop('disabled', disabled);
 				});
-				byName(latitudeFieldName).prop('disabled', disabled);
-				byName(longitudeFieldName).prop('disabled', disabled);
+			}
+
+			// Load-time disabling, and the one place a destination may arrive already holding a
+			// value the module did not write: @DEFAULT or @SETVALUE, piping, a data import, or
+			// the value saved last time on an edit form. Such a field must stay submittable. A
+			// disabled input is not serialised, so REDCap receives nothing for it and the save
+			// writes a blank over the value REDCap itself rendered moments earlier — which is
+			// how @DEFAULT came to look broken.
+			//
+			// The trade-off is deliberate and narrows the "no manual edits" invariant: a
+			// pre-populated address is hand-editable, an autocomplete-populated one still is
+			// not until it receives a value. Silent data loss is the worse failure, and for
+			// "has your postal address changed?" an editable default is the wanted behaviour.
+			function disableEmptyDestinationFields() {
+				$.each(destinationFieldNames(), function(i, fieldName) {
+					var $element = byName(fieldName);
+					if ($element.length === 0) { return; }
+					$element.prop('disabled', String($element.val() || '') === '');
+				});
 			}
 
 			var lastTypedText = '';
 
 			var fieldHoldsSelectedAddress = false;
+
+			// Whether the search box has held text at any point — seeded from an existing
+			// address, or typed by the participant. Gates the clear-on-empty path: without it
+			// one keystroke and a backspace on a pre-populated form clears an address the
+			// participant never meant to touch, and with the fields now enabled that blank
+			// would save.
+			var boxHeldText = false;
 
 			// Do not add subpremise. This doubles as the registry of components that have a
 			// destination field, and no googleSearch_*subpremise element ever exists.
@@ -296,7 +337,7 @@ SCRIPT;
 					byName(fieldName).attr('id', autocompletePrefix + componentType);
 				});
 
-				setDestinationFieldsDisabled(true);
+				disableEmptyDestinationFields();
 
 				$autocompleteField.wrap('<div class="gaa-location-field"></div>');
 				$autocompleteField.hide();
@@ -423,6 +464,46 @@ SCRIPT;
 					.appendTo($wrapper);
 			}
 
+			// The source field is hidden and the widget starts empty, so an address already on
+			// record is invisible: the participant cannot confirm it is still right, and an
+			// empty box invites them to retype an address that had not changed.
+			//
+			// Writability of .value is not documented for PlaceAutocompleteElement — only
+			// reading it is relied on elsewhere here — so the write is verified rather than
+			// assumed, and an element that ignores it falls back to a static line above the
+			// widget. Either way the address is shown.
+			function seedWidgetWithExistingAddress(placeAutocomplete, $field) {
+				var existingAddress = String($field.val() || '');
+				if (existingAddress === '') { return; }
+
+				// boxHeldText only. fieldHoldsSelectedAddress means "this session's autocomplete
+				// wrote $field", and degradeToManualEntry() gates its typed-text rescue on it:
+				// setting it here would discard a participant's half-typed address on exactly
+				// the pre-populated forms this seeding exists for.
+				boxHeldText = true;
+
+				var seeded = false;
+				try {
+					placeAutocomplete.value = existingAddress;
+					seeded = (String(placeAutocomplete.value || '') === existingAddress);
+				} catch (e) {
+					console.warn(logPrefix + 'Could not seed the widget with the existing address.', e);
+				}
+				if (seeded) { return; }
+
+				console.log(logPrefix + 'Widget would not accept a seeded value; ' +
+					'showing the existing address above it instead.');
+
+				var $wrapper = $field.closest('.gaa-location-field');
+				if ($wrapper.find('.gaa-existing-address').length) { return; }
+				// .text() for the address, so a value out of the record cannot carry markup.
+				$('<div></div>')
+					.addClass('gaa-existing-address')
+					.append($('<span></span>').text('On record: ' + existingAddress))
+					.append(' — search below only if it has changed.')
+					.insertBefore(placeAutocomplete);
+			}
+
 			function initWithNewApi(PlaceAutocompleteElement, $field) {
 				// Caught so a bad filter value degrades to unfiltered predictions rather than
 				// aborting initialisation and leaving a plain text box on the form.
@@ -466,6 +547,9 @@ SCRIPT;
 				$field.before(placeAutocomplete);
 				liveAutocomplete = placeAutocomplete;
 
+				// After insertion, so the fallback line has a widget to sit above.
+				seedWidgetWithExistingAddress(placeAutocomplete, $field);
+
 				addPrivacyNotice($field);
 
 				// Record what the user types, for unit recovery. The widget's shadow root is
@@ -475,8 +559,18 @@ SCRIPT;
 					if (!e.isTrusted) { return; }
 					var typed = placeAutocomplete.value || '';
 					lastTypedText = typed;
-					// A cleared box must not leave the previous address behind.
-					if (typed === '') { fillInAddress(null, $field); }
+					if (typed !== '') {
+						boxHeldText = true;
+						return;
+					}
+					// A cleared box must not leave the previous address behind — but only a box
+					// that held text counts as cleared. On a form that arrived pre-populated an
+					// untouched empty box receives input events too, and clearing on those wipes
+					// an address the participant never edited.
+					if (boxHeldText) {
+						boxHeldText = false;
+						fillInAddress(null, $field);
+					}
 				});
 
 				applyGeolocationBias(placeAutocomplete);

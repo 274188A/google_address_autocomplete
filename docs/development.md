@@ -25,12 +25,12 @@ neither catches the other's regressions.
 | Unit (`tests/unit.test.mjs`) | Node | The pure JavaScript helpers still behave as they do today |
 
 ```
-C:\tools\php85\php.exe tests/golden.php verify
+D:\PHP\v8.5.10\php.exe tests/golden.php verify
 node --test tests/unit.test.mjs
 ```
 
 Both exit non-zero on failure, so either works as a pre-commit gate. PHP is not on `PATH` on the
-maintainer's machine, hence the full path above.
+maintainer's machine, hence the full path above — substitute your own install path.
 
 **[tests/README.md](../tests/README.md) is the authoritative reference** for both harnesses —
 layout, what each fixture covers, how the unit tests extract functions from the PHP source, and
@@ -42,12 +42,15 @@ The module's only observable behaviour is the markup it echoes, so correctness u
 is checkable directly: for identical settings input, the output must be byte-identical.
 
 ```
-C:\tools\php85\php.exe tests/golden.php verify    # exit 1 on any mismatch
-C:\tools\php85\php.exe tests/golden.php capture   # re-record, only when a markup change is intended
+D:\PHP\v8.5.10\php.exe tests/golden.php verify    # exit 1 on any mismatch
+D:\PHP\v8.5.10\php.exe tests/golden.php capture   # re-record, only when a markup change is intended
 ```
 
-Fifteen fixtures in `tests/fixtures.php` cover one and two sets, each optional field mapping, the
-privacy-notice states, instrument scoping, and both misconfiguration warnings. Log messages are
+Twenty fixtures in `tests/fixtures.php` cover one and two sets, each optional field mapping, the
+privacy-notice states, instrument and event scoping, and both misconfiguration warnings. Five of
+them assert an *empty* render — a disabled set, a set scoped out by instrument or by event, a null
+event id, and a missing API key — so a change that starts emitting on a page that should stay
+untouched fails as loudly as a change to the markup itself. Log messages are
 captured alongside the markup, so a change that stops warning about a misconfigured set fails
 too. It runs against a stub of `AbstractExternalModule` implementing the three framework methods
 the module calls.
@@ -83,6 +86,13 @@ Google Places API is covered by neither harness. Changes there warrant a browser
 form — the PHP conditionals produce materially different JavaScript depending on which settings
 are mapped, and an unsubstituted `<?php` tag or an empty assignment (`var x = ;`) kills the whole
 inline script.
+
+There is a second, narrower blind spot. Fixtures supply *settings*, never form markup, so no
+harness can express "this destination arrived holding a value". Everything conditional on the
+state of the form at load — `disableEmptyDestinationFields()`, the seeded widget and its fallback
+line, the `boxHeldText` clear guard — is verified by hand against a live form only. Re-check those
+on a fresh record after touching them, and remember `@DEFAULT` fires only while the field is
+blank, so a record already saved shows nothing.
 
 `php -l` is likewise a syntax check, not a compatibility check. The maintainer's PHP is 8.5 while
 `config.json` sets a floor of 8.2, so 8.3+ syntax lints clean locally and would fatal on the
@@ -123,24 +133,60 @@ write into set A's fields. A fixed `#locationField` was exactly that bug.
 The prefix uses the **configured** position of the set, not its position among the sets that
 qualified on the current page, so a set's ids stay stable however the others are scoped.
 
-### Destination fields load disabled
+### Destination fields load disabled unless pre-populated
 
-Destination fields are `disabled` on load and re-enabled individually as each receives a value.
-That prevents manual edits and ensures REDCap saves only autocomplete-populated values. A disabled
-input is not submitted, so anything that writes a value **must** also enable its element:
+Destination fields are `disabled` on load **only if they arrive empty**
+(`disableEmptyDestinationFields()`), and re-enabled individually as each receives a value. That
+prevents manual edits to fields the module populates itself. A disabled input is not submitted, so
+anything that writes a value **must** also enable its element:
 
 - every write goes through `updateAndEnable()`, never a bare `updateValue()`;
 - every clear goes through `clearAndEnable()`, which enables only when the field actually held
   something. A blank has to reach the record only when it overwrites a value, and enabling
   unconditionally made the whole address hand-editable after one selection.
 
+The empty check is the exception, and it exists because a destination can arrive already holding a
+value the module did not write: `@DEFAULT` or `@SETVALUE`, piping, a data import, or the value
+saved last time on an edit form. Disabling those unconditionally meant REDCap received nothing for
+the field and the save wrote a blank over a value REDCap itself had rendered moments earlier —
+`@DEFAULT` looked broken while the action tag was working correctly.
+
+That narrows the guarantee deliberately: a pre-populated address is hand-editable, an
+autocomplete-populated one is not until it receives a value. Silent data loss is the worse
+failure, and for a "has your postal address changed?" question an editable default is the wanted
+behaviour anyway.
+
 Latitude and longitude are the ones to watch: they are the only destinations resolved by field
 *name* rather than by `googleSearch_*` id, which is how they came to be written without ever being
 enabled. `fieldElement()` resolves both kinds, so `updateAndEnable()` does not need to know which
-it was handed.
+it was handed. `destinationFieldNames()` is the single list of both kinds, so a new destination
+cannot be disabled by one path and missed by the other.
 
 Known limitation, deliberately not fixed: a field enabled by one fill stays enabled for the rest
 of the page.
+
+### An address already on record is shown, and only a deliberate clear wipes it
+
+The source field is hidden and the widget is created empty, so a value already in that field is
+invisible on the form. `seedWidgetWithExistingAddress()` writes it into the widget after
+insertion, so the participant can see what is held and leave it alone if it is still correct.
+
+Writability of `.value` is not documented for `PlaceAutocompleteElement` — only reading it is
+relied on elsewhere — so the write is read back and verified rather than assumed. An element that
+ignores it gets a static `.gaa-existing-address` line above the widget instead. Either way the
+address is shown; what must not happen is a form that silently holds an address the participant
+was never given the chance to confirm.
+
+The seeder sets `boxHeldText` and **must not** set `fieldHoldsSelectedAddress`. The two are not
+interchangeable: `fieldHoldsSelectedAddress` means "this session's autocomplete wrote `$field`"
+and gates the typed-text rescue in `degradeToManualEntry()`, so setting it here would discard a
+half-typed address on exactly the pre-populated forms this seeding exists for — the bug the rescue
+gate was written to avoid, re-entered from the other side.
+
+`boxHeldText` also gates the clear-on-empty path in the `input` listener. Clearing the box clears
+the record only once the box has held text. An untouched empty box on a pre-populated form
+receives `input` events too, and clearing on those wiped a defaulted address the participant never
+edited — which, with the fields now enabled, would have saved the blank.
 
 ### Failure degrades, never blocks
 

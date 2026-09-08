@@ -4,12 +4,21 @@
 
 ## What the participant sees
 
-- **Destination fields are disabled on page load**, and each is re-enabled individually as a
-  selection writes to it. This stops participants hand-editing the components and ensures REDCap
-  only saves autocomplete-populated values. A field is enabled when it receives a value, and also
-  when a blank has to overwrite something it already held — a disabled input is not submitted, so
-  a field left disabled would keep whatever was saved against the record earlier. A field that was
-  blank before the selection and is blank after it stays locked.
+- **Destination fields are disabled on page load if they are empty**, and each is re-enabled
+  individually as a selection writes to it. This stops participants hand-editing the components
+  and ensures REDCap only saves autocomplete-populated values. A field is enabled when it receives
+  a value, and also when a blank has to overwrite something it already held — a disabled input is
+  not submitted, so a field left disabled would keep whatever was saved against the record
+  earlier. A field that was blank before the selection and is blank after it stays locked.
+- **A field that already holds a value stays editable.** That covers an address the participant
+  gave earlier, one piped or defaulted in with `@DEFAULT` or `@SETVALUE`, and one loaded by a data
+  import. Locking those would stop them being submitted, and REDCap would save a blank over the
+  value it had just put on the form — so they are left unlocked and the participant can correct
+  them by hand. Only fields the module fills itself are locked until it fills them.
+- **An address already on record is shown in the search box**, so a participant asked whether
+  their address has changed can see what is held and leave it alone if it is still right. If the
+  Google widget will not accept the value, it appears as a line of text directly above the box
+  instead.
 - **A selection replaces the whole address, not just the parts it supplies.** Every mapped field
   is cleared before the newly selected place is written, so components the new address does not
   have — a county, or the place name for an address that is not a named premises — are blanked
@@ -17,8 +26,10 @@
   captured for one address staying attached to a different one.
 - **The original address field is hidden, not removed.** It still submits, holding the full
   formatted address.
-- **Clearing the search box clears everything.** Emptying the field wipes all destination fields,
-  so a cleared search can never leave the previous address behind.
+- **Clearing the search box clears everything, once it has held text.** Emptying the box wipes all
+  destination fields, so a cleared search can never leave the previous address behind. A box the
+  participant has not typed into does not count as cleared: on a form that opened with an address
+  already filled in, an untouched box leaves that address alone.
 - **Branching logic re-runs** after any fill or clear, so fields conditional on the address
   appear and disappear correctly.
 - **Predictions are biased toward the participant's location** if they grant the browser's
