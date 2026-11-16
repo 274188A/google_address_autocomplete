@@ -466,33 +466,34 @@
 					return;
 				}
 
-				var eleType = element.prop('type');
+				// Coordinates arrive as numbers.
+				value = (value === null || value === undefined) ? '' : String(value);
 				element.val(value);
+
+				// Matched by property, never by selector text: Google values carry quotes
+				// ("The \"Big\" Shed"), which make an attribute selector throw.
+				function withValue($set, wanted) {
+					return $set.filter(function() { return this.value === wanted; });
+				}
 
 				var eleName = element.attr('name');
 				if (element.hasClass('hiddenradio')) {
-					$('input[name="'+eleName+'___radio"][value="'+value+'"]').prop('checked', true);
-				} else if (eleType.indexOf("select") >= 0) {
-					if ($('#'+id+' option[value="'+value+'"]').length > 0) {
-						$('#'+id+' option[value="'+value+'"]').prop('selected', true);
-					} else {
-						var valUnderscore = value.replace(/\s+/g,"_");
-						if ($('#'+id+' option[value="'+valUnderscore+'"]').length > 0) {
-							$('#'+id+' option[value="'+valUnderscore+'"]').prop('selected', true);
-						} else if ($('#'+id+' option[value="Other"]').length > 0) {
-							$('#'+id+' option[value="Other"]').prop('selected', true);
-						} else {
-							var optionsWithMatchingContent = $('#'+id+' option').filter(function(){
-								return $(this).html() === value;
-							});
+					withValue(byName(eleName + '___radio'), value).prop('checked', true);
+				} else if (element.is('select')) {
+					var options = element.find('option');
+					var match = withValue(options, value);
+					if (!match.length) { match = withValue(options, value.replace(/\s+/g, '_')); }
+					if (!match.length) { match = withValue(options, 'Other'); }
+					if (!match.length) {
+						var byText = options.filter(function() { return $(this).html() === value; });
+						if (byText.length === 1) { match = byText; }
+					}
 
-							if (optionsWithMatchingContent.length === 1) {
-								optionsWithMatchingContent.prop('selected', true);
-							} else {
-								console.warn(logPrefix + "The value '" + value + "' is not a valid value for the '" + eleName + "' field; leaving it blank.");
-								$('#'+id+' option[value=""]').prop('selected', true);
-							}
-						}
+					if (match.length) {
+						match.first().prop('selected', true);
+					} else {
+						console.warn(logPrefix + "The value '" + value + "' is not a valid value for the '" + eleName + "' field; leaving it blank.");
+						withValue(options, '').prop('selected', true);
 					}
 				}
 

@@ -30,6 +30,12 @@ releasing, rename the deployment directory and tag the commit to match the versi
   just State and Postcode saved `WA 6103` as the full address after a postcode correction. The
   rebuild now runs only for sets mapping Street Number, Street, City, State and Postcode; other
   sets keep Google's address and save the corrected component on its own, as before 1.0.5.
+- **A value containing a quote no longer stops the fill partway.** Writing to a dropdown or radio
+  field built a jQuery selector from the value itself, so a Google value such as the place name
+  `The "Big" Shed` threw a selector error. The remaining fields were left unwritten and branching
+  logic did not re-run. Options are now matched by comparing values, not through selector text.
+  The same change fixes latitude or longitude mapped to a dropdown field, which threw because
+  coordinates arrive as numbers.
 
 ---
 
