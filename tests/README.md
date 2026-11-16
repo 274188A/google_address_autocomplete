@@ -53,7 +53,7 @@ scratch — delete them, don't commit them.
 
 Event scoping (matched, scoped out, blank-means-any, form-matches-but-event-does-not, and a
 null event id); one set / two sets; unit recovery on/off; lat-lng, place-name and prediction filters
-mapped/unmapped; privacy notice default/custom/suppressed; bootstrap loader on/off; a disabled
+mapped/unmapped; a partially mapped set (hand-edit rebuild compiled out); privacy notice default/custom/suppressed; bootstrap loader on/off; a disabled
 set; instrument scoping (matched, unmatched, and blank-means-any); missing API key; and both
 misconfiguration warnings (two sets sharing a source field, two sets sharing a destination field).
 

@@ -83,6 +83,13 @@ function gaa_fixtures(): array {
 		'set-primary-types' => '',
 	];
 
+	// Only some components mapped — the hand-edit rebuild must be compiled out, or a
+	// corrected postcode would replace the full address with "WA 6103".
+	$partialComponents = $full;
+	foreach (['set-street-number', 'set-street', 'set-city', 'set-county', 'set-country'] as $key) {
+		$partialComponents[$key] = '';
+	}
+
 	$disabled = $full;
 	$disabled['set-disabled'] = true;
 
@@ -126,6 +133,11 @@ function gaa_fixtures(): array {
 		'no-place-name' => [
 			'project'    => $baseProject,
 			'sets'       => [$noPlaceName],
+			'instrument' => 'demographics',
+		],
+		'partial-components' => [
+			'project'    => $baseProject,
+			'sets'       => [$partialComponents],
 			'instrument' => 'demographics',
 		],
 		'sparse-missing-keys' => [

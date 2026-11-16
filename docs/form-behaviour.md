@@ -35,7 +35,10 @@
   Latitude, longitude and place name, if mapped, are cleared at the same time: they described
   the suggestion, not the corrected address. Before this, the corrected components saved but the
   full address kept the Google suggestion. A record saved that way is fixed by opening the form,
-  changing any component and saving.
+  changing any component and saving. This happens only when the set maps **Street Number,
+  Street, City, State and Postcode** — with fewer, the rebuilt address would be a fragment
+  (`WA 6103`) replacing the full one, so a set missing any of them keeps Google's address and
+  saves the corrected component on its own.
 - **Clearing the search box clears everything, once it has held text.** Emptying the box wipes all
   destination fields, so a cleared search can never leave the previous address behind. A box the
   participant has not typed into does not count as cleared: on a form that opened with an address

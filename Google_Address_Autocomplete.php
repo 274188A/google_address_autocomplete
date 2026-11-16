@@ -338,7 +338,9 @@ SCRIPT;
 				});
 
 				disableEmptyDestinationFields();
+<?php if ($set->rebuildsAddressOnEdit()): ?>
 				watchManualEdits($autocompleteField);
+<?php endif; ?>
 
 				$autocompleteField.wrap('<div class="gaa-location-field"></div>');
 				$autocompleteField.hide();
@@ -879,6 +881,7 @@ SCRIPT;
 
 				if (typeof doBranching === 'function') { doBranching(); }
 			}
+<?php if ($set->rebuildsAddressOnEdit()): ?>
 
 			// A generic comma-joined layout: Google's per-country formatting cannot be
 			// reproduced here, and what matters is that the stored address agrees with the
@@ -956,6 +959,7 @@ SCRIPT;
 					syncFormattedAddressFromComponents($field);
 				});
 			}
+<?php endif; ?>
 		})();
 		</script>
 		<?php

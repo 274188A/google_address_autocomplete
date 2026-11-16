@@ -105,6 +105,17 @@ final readonly class AddressFieldSet
 		return !$this->events || in_array($eventId, $this->events, true);
 	}
 
+	/**
+	 * The hand-edit rebuild overwrites the source field with what the components compose, so
+	 * a set missing any of these would replace a full address with a fragment. County and
+	 * country stay optional: AU projects leave County blank, and many imply the country.
+	 */
+	public function rebuildsAddressOnEdit(): bool
+	{
+		return $this->streetNumber !== '' && $this->street !== '' && $this->city !== ''
+			&& $this->state !== '' && $this->zip !== '';
+	}
+
 	public function label(): string
 	{
 		return '#' . ($this->index + 1) . ($this->description !== '' ? ' ' . $this->description : '');

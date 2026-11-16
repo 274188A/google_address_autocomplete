@@ -156,7 +156,10 @@ readable:
   mapped coordinates and place name. Wired at document ready, before the widget
   loads. The module's own writes use jQuery `.change()`, which dispatches no
   native event, so they never trigger it. Skipped once the form has degraded to
-  manual entry, where the source field is visible and the user's own.
+  manual entry, where the source field is visible and the user's own. Emitted
+  only when `rebuildsAddressOnEdit()` holds (street number, street, city, state
+  and postcode all mapped); otherwise the rebuild would overwrite a full address
+  with a fragment.
 - **Latitude / longitude by name** — deliberately not `AddressComponent` cases;
   they have no `googleSearch_*` id and are resolved by field name in
   `fieldElement()`.

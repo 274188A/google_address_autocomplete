@@ -25,6 +25,11 @@ releasing, rename the deployment directory and tag the commit to match the versi
   box was still treated as holding text. Typing one character and deleting it then cleared the
   Autocomplete Field and every component. Clearing now applies only when the box actually showed
   the address.
+- **Correcting a component by hand no longer cuts the full address down to a fragment.** The
+  rebuild added in 1.0.5 composed the address from the mapped components only, so a set mapping
+  just State and Postcode saved `WA 6103` as the full address after a postcode correction. The
+  rebuild now runs only for sets mapping Street Number, Street, City, State and Postcode; other
+  sets keep Google's address and save the corrected component on its own, as before 1.0.5.
 
 ---
 
