@@ -13,6 +13,10 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+---
+
+## [1.0.6] - 2026-11-16
+
 ### Changed
 
 - **Configuration warnings are logged once a day, not on every page view.** Two sets sharing an
@@ -463,6 +467,7 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.6]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.6
 [1.0.5]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.5
 [1.0.4]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.4
 [1.0.3]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.3
