@@ -112,6 +112,7 @@
 				});
 
 				disableEmptyDestinationFields();
+				watchManualEdits($autocompleteField);
 
 				$autocompleteField.wrap('<div class="gaa-location-field"></div>');
 				$autocompleteField.hide();
@@ -642,6 +643,81 @@
 				}
 
 				if (typeof doBranching === 'function') { doBranching(); }
+			}
+
+			// A generic comma-joined layout: Google's per-country formatting cannot be
+			// reproduced here, and what matters is that the stored address agrees with the
+			// components, which is what gets piped into other instruments.
+			function composeAddress(parts) {
+				function part(key) { return String((parts && parts[key]) || '').trim(); }
+				function joined(keys, separator) {
+					return keys.map(part).filter(Boolean).join(separator);
+				}
+				return [
+					joined(['street_number', 'route'], ' '),
+					part('locality'),
+					part('administrative_area_level_2'),
+					joined(['administrative_area_level_1', 'postal_code'], ' '),
+					part('country')
+				].filter(Boolean).join(', ');
+			}
+
+			// Option text, not the code: updateValue() matched Google's text against it.
+			function componentText(id) {
+				var element = fieldElement(id);
+				if (element.length === 0) { return ''; }
+				if (element.is('select')) {
+					return element.val() ? $.trim(element.find('option:selected').text()) : '';
+				}
+				return $.trim(String(element.val() || ''));
+			}
+
+			// Without this a hand-corrected component leaves the source field, the search box
+			// and everything piping it showing the Google selection the user corrected.
+			function syncFormattedAddressFromComponents($field) {
+				if (autocompleteFailed) { return; }   // the source field is visible and the user's own
+
+				var parts = {};
+				for (var component in componentForm) {
+					parts[component] = componentText(autocompletePrefix + component);
+				}
+				var address = composeAddress(parts);
+				if (address === String($field.val() || '')) { return; }
+
+				$field.val(address);
+				$field.change();
+				// Protects the corrected address from degradeToManualEntry()'s typed-text rescue.
+				fieldHoldsSelectedAddress = (address !== '');
+				boxHeldText = boxHeldText || address !== '';
+
+				// Coordinates and a place name belong to the selection, not to the corrected
+				// address; a wrong location is worse than a blank one.
+												
+				if (document.getElementById(autocompletePrefix + 'place_name')) {
+					clearAndEnable(autocompletePrefix + 'place_name');
+				}
+
+				if (liveAutocomplete) {
+					try { liveAutocomplete.value = address; } catch (e) { /* display only */ }
+				}
+				$field.closest('.gaa-location-field').find('.gaa-existing-address span')
+					.text('On record: ' + address);
+			}
+
+			// Native listeners with isTrusted, so the module's own jQuery .change() calls,
+			// which dispatch no native event, never trigger a rebuild. The ___radio suffix
+			// covers a component held in a radio field.
+			function watchManualEdits($field) {
+				var names = {};
+				for (var component in componentForm) {
+					var fieldName = destinationFields[component];
+					if (fieldName) { names[fieldName] = true; }
+				}
+				document.addEventListener('change', function(e) {
+					if (!e.isTrusted || !e.target || !e.target.name) { return; }
+					if (!names[String(e.target.name).replace(/___radio$/, '')]) { return; }
+					syncFormattedAddressFromComponents($field);
+				});
 			}
 		})();
 		</script>
