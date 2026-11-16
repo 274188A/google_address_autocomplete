@@ -477,12 +477,6 @@ SCRIPT;
 				var existingAddress = String($field.val() || '');
 				if (existingAddress === '') { return; }
 
-				// boxHeldText only. fieldHoldsSelectedAddress means "this session's autocomplete
-				// wrote $field", and degradeToManualEntry() gates its typed-text rescue on it:
-				// setting it here would discard a participant's half-typed address on exactly
-				// the pre-populated forms this seeding exists for.
-				boxHeldText = true;
-
 				var seeded = false;
 				try {
 					placeAutocomplete.value = existingAddress;
@@ -490,7 +484,12 @@ SCRIPT;
 				} catch (e) {
 					console.warn(logPrefix + 'Could not seed the widget with the existing address.', e);
 				}
-				if (seeded) { return; }
+				// Only once the box really holds it: an empty box must not arm clear-on-empty.
+				// Never fieldHoldsSelectedAddress — see docs/development.md.
+				if (seeded) {
+					boxHeldText = true;
+					return;
+				}
 
 				console.log(logPrefix + 'Widget would not accept a seeded value; ' +
 					'showing the existing address above it instead.');
@@ -600,6 +599,8 @@ SCRIPT;
 						console.warn(logPrefix + 'Could not process place.', e);
 						place = null;
 					}
+					// fillInAddress(null) means "box cleared" and would blank the record.
+					if (!place) { return; }
 					fillInAddress(place, $field);
 				});
 			}

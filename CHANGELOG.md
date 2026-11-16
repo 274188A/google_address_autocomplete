@@ -13,6 +13,19 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Fixed
+
+- **A failed place lookup no longer blanks the address.** If fetching the details of a chosen
+  prediction failed (a brief network or quota problem), the module treated it as the search box
+  being cleared: it blanked the Autocomplete Field and every mapped component and enabled them, so
+  saving the form overwrote the address on record with blanks. A failed lookup now leaves every
+  field as it was.
+- **Typing and deleting in an empty search box no longer blanks an address on record.** When the
+  search box would not accept the saved address and showed it as an "On record" line instead, the
+  box was still treated as holding text. Typing one character and deleting it then cleared the
+  Autocomplete Field and every component. Clearing now applies only when the box actually showed
+  the address.
+
 ---
 
 ## [1.0.5] - 2026-11-16

@@ -103,6 +103,7 @@ form.
 ```mermaid
 flowchart TD
     A["Participant picks prediction<br/>gmp-select fires"] --> B["Fetch place details<br/>toPlace, then fetchFields"]
+    B -- fetch failed --> K["Leave every field as it was<br/>log and return"]:::degrade
     B --> C["fillInAddress: clear all mapped fields first<br/>so no stale value lingers"]:::ok
     C --> D["Write formatted address and coords<br/>formatted text, lat, lng"]:::ok
     D --> E["Map each component to its field<br/>updateAndEnable, plus unit and place name"]:::ok
@@ -118,6 +119,9 @@ flowchart TD
 
 Key points:
 
+- A failed `fetchFields()` **returns without touching any field**. It must not
+  reach `fillInAddress(null)`, which means "the box was cleared" and blanks the
+  source field and every component — saving blanks over an address on record.
 - `fillInAddress()` **clears every mapped field before writing**, so a component
   absent from the newly-selected place cannot keep the previous address's value.
 - Latitude and longitude are written and enabled here. They are the only

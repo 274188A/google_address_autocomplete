@@ -177,7 +177,9 @@ ignores it gets a static `.gaa-existing-address` line above the widget instead. 
 address is shown; what must not happen is a form that silently holds an address the participant
 was never given the chance to confirm.
 
-The seeder sets `boxHeldText` and **must not** set `fieldHoldsSelectedAddress`. The two are not
+The seeder sets `boxHeldText` — only when the read-back confirms the box holds the address; on the
+`.gaa-existing-address` fallback the box is empty, and arming clear-on-empty there let one typed
+and deleted character blank the record — and **must not** set `fieldHoldsSelectedAddress`. The two are not
 interchangeable: `fieldHoldsSelectedAddress` means "this session's autocomplete wrote `$field`"
 and gates the typed-text rescue in `degradeToManualEntry()`, so setting it here would discard a
 half-typed address on exactly the pre-populated forms this seeding exists for — the bug the rescue
