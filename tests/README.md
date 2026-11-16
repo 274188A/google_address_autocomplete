@@ -38,7 +38,7 @@ C:\tools\php85\php.exe tests/golden.php verify
 
 | Path | Purpose |
 |---|---|
-| `stub/AbstractExternalModule.php` | ~40-line stand-in for the REDCap framework base class. Implements only `getProjectSetting()`, `getSubSettings()` and `log()` — the three methods the module calls. |
+| `stub/AbstractExternalModule.php` | ~40-line stand-in for the REDCap framework base class. Implements only `getProjectSetting()`, `getSubSettings()`, `log()` and `throttle()` — the methods the module calls. `throttle()` models only the `message = ?` form and ignores the time window. |
 | `extract.mjs` | Lifts a named JS function out of the PHP source for the unit tests. |
 | `unit.test.mjs` | The unit tests. |
 | `fixtures.php` | The settings scenarios. `gaa_full_set()` is a fully populated address set; the rest vary one thing from it. A fixture may carry an `event` key (the event id it renders at, default 1); `null` is honoured rather than defaulted, since "no event" is itself a case. |

@@ -116,7 +116,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 
 			$source = $set->autocomplete;
 			if (isset($claimedSources[$source])) {
-				$this->log(sprintf(
+				$this->logOnce(sprintf(
 					'Address Autocomplete: skipped set #%d on instrument "%s" because its '
 						. 'Autocomplete Field "%s" is already used by set #%d.',
 					$index + 1, $instrument, $source, $claimedSources[$source] + 1
@@ -127,7 +127,7 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 
 			foreach ($this->destinationFieldNames($set) as $fieldName) {
 				if (isset($claimedDestinations[$fieldName])) {
-					$this->log(sprintf(
+					$this->logOnce(sprintf(
 						'Address Autocomplete: set #%d and set #%d both write to field "%s" on '
 							. 'instrument "%s". One of them will overwrite the other.',
 						$index + 1, $claimedDestinations[$fieldName] + 1, $fieldName, $instrument
@@ -167,6 +167,15 @@ class Google_Address_Autocomplete extends AbstractExternalModule
 			if ($fieldName !== '') { $names[$fieldName] = true; }
 		}
 		return array_keys($names);
+	}
+
+	/**
+	 * getActiveSets() runs on every page render, so a configuration mistake would otherwise
+	 * write an identical row per page view. Once a day keeps it visible without the flood.
+	 */
+	private function logOnce(string $message): void {
+		if ($this->throttle('message = ?', [$message], 86400, 1)) { return; }
+		$this->log($message);
 	}
 
 	private function resolvePrivacyNotice($project_id): string {

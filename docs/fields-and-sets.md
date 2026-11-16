@@ -56,7 +56,8 @@ practice name.
 
 Sets are checked before anything is emitted. A misconfigured set is skipped and the reason is
 written to the module log (**External Modules → View logs**); it never takes the rest of the
-page down with it.
+page down with it. The check runs on every page view, but each distinct warning is logged at most
+once a day, so the log shows the problem without a row for every participant.
 
 | Situation | What happens |
 |---|---|

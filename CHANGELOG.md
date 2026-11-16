@@ -13,6 +13,13 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ## [Unreleased]
 
+### Changed
+
+- **Configuration warnings are logged once a day, not on every page view.** Two sets sharing an
+  Autocomplete Field or a destination field are detected each time a page renders, and each
+  detection wrote a module log row, so one mistake produced a row for every participant page
+  view until it was fixed. Each distinct warning is now logged at most once a day.
+
 ### Fixed
 
 - **A failed place lookup no longer blanks the address.** If fetching the details of a chosen

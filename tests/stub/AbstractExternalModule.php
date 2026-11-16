@@ -4,9 +4,9 @@
  * Minimal stand-in for the REDCap External Modules framework base class, so the
  * module can be exercised outside REDCap.
  *
- * Only the three framework methods the module actually calls are implemented:
- * getProjectSetting(), getSubSettings() and log(). Nothing here models REDCap
- * behaviour beyond what those three need to return.
+ * Only the framework methods the module actually calls are implemented:
+ * getProjectSetting(), getSubSettings(), log() and throttle(). Nothing here models
+ * REDCap behaviour beyond what those need to return.
  *
  * IMPORTANT: this stub deliberately does NOT autoload sibling classes. REDCap's
  * own autoloading of additional classes in a module namespace is unverified, so
@@ -38,5 +38,15 @@ abstract class AbstractExternalModule
 	{
 		$this->logMessages[] = $message;
 		return 1;
+	}
+
+	/**
+	 * Models only the "message = ?" form the module uses, and ignores the time window:
+	 * within one render every earlier log() is recent.
+	 */
+	public function throttle($sql, $parameters, $seconds, $maxOccurrences)
+	{
+		$message = ((array)$parameters)[0] ?? null;
+		return count(array_keys($this->logMessages, $message, true)) >= $maxOccurrences;
 	}
 }
