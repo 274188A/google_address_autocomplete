@@ -11,6 +11,23 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **A hand-corrected address no longer keeps the Google suggestion in the full address.** When
+  Google did not offer the right address, a user could pick the nearest one and correct the
+  suburb, state or postcode in the component fields, which a selection leaves enabled. The
+  components saved correctly, but the Autocomplete Field kept Google's formatted address, so the
+  search box reopened showing the wrong address and every instrument piping that field showed it
+  too. In one project that field was the address shown to the depot dispatching study medication.
+  A trusted change to a component field now rebuilds the Autocomplete Field and the search box from
+  the components, and clears any mapped latitude, longitude and place name, which described the
+  suggestion. See [How it behaves on the form](docs/form-behaviour.md). Records saved before this
+  fix keep the stale address until a component is changed and the form saved again.
+
+---
+
 ## [1.0.4] - 2026-09-03
 
 ### Added

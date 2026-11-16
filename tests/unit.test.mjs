@@ -11,17 +11,19 @@
  * The functions are lifted out of Google_Address_Autocomplete.php at run time
  * (see extract.mjs) rather than copied, so they cannot drift from the source.
  * Scope is limited to helpers that touch neither the DOM nor jQuery, which
- * today means recoverUnitFromText(), extractUnitParts(), and escapeRegExp().
+ * today means recoverUnitFromText(), extractUnitParts(), escapeRegExp() and
+ * composeAddress().
  */
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadFunctions } from './extract.mjs';
 
-const { recoverUnitFromText, escapeRegExp, extractUnitParts } = loadFunctions([
+const { recoverUnitFromText, escapeRegExp, extractUnitParts, composeAddress } = loadFunctions([
 	'escapeRegExp',
 	'recoverUnitFromText',
 	'extractUnitParts',
+	'composeAddress',
 ]);
 
 /** Shorthand: assert recoverUnitFromText(typed, streetNumber) === expected. */
@@ -226,4 +228,36 @@ test('extractUnitParts feeds recoverUnitFromText its street number', () => {
 	const parts = extractUnitParts([comp('street_number', '27'), comp('route', 'Harris St')]);
 	assert.equal(parts.unit, '', 'Google omitted the subpremise');
 	assert.equal(recoverUnitFromText('3/27 Harris St', parts.streetNumber), '3');
+});
+
+test('composeAddress rebuilds a hand-corrected AU address from its components', () => {
+	// The LEADER-PAD case: Google offered Payneham SA, the user corrected the
+	// suburb, state and postcode by hand.
+	assert.equal(composeAddress({
+		street_number: '1/6',
+		route: 'Arthur Street',
+		locality: 'Shenton Park',
+		administrative_area_level_1: 'WA',
+		postal_code: '6008',
+	}), '1/6 Arthur Street, Shenton Park, WA 6008');
+});
+
+test('composeAddress places county and country when they are mapped', () => {
+	assert.equal(composeAddress({
+		street_number: '27',
+		route: 'Harris Street',
+		locality: 'Springfield',
+		administrative_area_level_2: 'Sangamon',
+		administrative_area_level_1: 'IL',
+		postal_code: '62704',
+		country: 'United States',
+	}), '27 Harris Street, Springfield, Sangamon, IL 62704, United States');
+});
+
+test('composeAddress drops blank and unmapped parts without stray separators', () => {
+	assert.equal(composeAddress({ route: 'Harris Street', postal_code: '6008' }), 'Harris Street, 6008');
+	assert.equal(composeAddress({ street_number: '  27 ', route: '', locality: ' Subiaco ' }), '27, Subiaco');
+	assert.equal(composeAddress({ street_number: '', route: '', locality: '' }), '', 'all blank');
+	assert.equal(composeAddress({}), '', 'nothing mapped');
+	assert.equal(composeAddress(null), '', 'null');
 });

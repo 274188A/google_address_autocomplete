@@ -146,6 +146,13 @@ readable:
   St` comes back as street number `27`. When enabled, the unit is parsed from the
   typed text, anchored to the street number Google did return, and prepended as
   `3/27`.
+- **Hand edits (`watchManualEdits` / `syncFormattedAddressFromComponents`)** — a
+  trusted native `change` on a component field rebuilds the source field and the
+  widget's text from the components with `composeAddress()`, and clears any
+  mapped coordinates and place name. Wired at document ready, before the widget
+  loads. The module's own writes use jQuery `.change()`, which dispatches no
+  native event, so they never trigger it. Skipped once the form has degraded to
+  manual entry, where the source field is visible and the user's own.
 - **Latitude / longitude by name** — deliberately not `AddressComponent` cases;
   they have no `googleSearch_*` id and are resolved by field name in
   `fieldElement()`.

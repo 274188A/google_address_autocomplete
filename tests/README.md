@@ -82,8 +82,9 @@ addition, whereas the explicit path works anywhere `node:test` does.
 
 These cover the unit-recovery path — `recoverUnitFromText()`, `extractUnitParts()` and the
 `escapeRegExp()` they depend on — which is pure, regex-heavy, and the most intricate logic in the
-module. Everything the golden harness cannot reach, because the golden files only prove that code
-was *emitted*, never that it *works*.
+module — plus `composeAddress()`, which rebuilds the full address after a hand edit. Everything
+the golden harness cannot reach, because the golden files only prove that code was *emitted*,
+never that it *works*.
 
 **The functions are extracted from `Google_Address_Autocomplete.php` at run time, not copied.**
 `extract.mjs` finds `function <name>(`, brace-matches to the end, and evaluates the result. A copy

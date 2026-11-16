@@ -26,6 +26,16 @@
   captured for one address staying attached to a different one.
 - **The original address field is hidden, not removed.** It still submits, holding the full
   formatted address.
+- **Correcting a component by hand rewrites the full address to match.** Google does not always
+  offer the right address, so a user may pick the nearest suggestion and fix the suburb or
+  postcode. When an enabled component field is changed by hand, the hidden address field and the
+  search box are rebuilt from the components — `1/6 Arthur Street, Shenton Park, WA 6008` — so
+  the saved address, and anything that pipes it into another instrument, agrees with what was
+  entered. The rebuilt address is comma-separated rather than in Google's per-country layout.
+  Latitude, longitude and place name, if mapped, are cleared at the same time: they described
+  the suggestion, not the corrected address. Before this, the corrected components saved but the
+  full address kept the Google suggestion. A record saved that way is fixed by opening the form,
+  changing any component and saving.
 - **Clearing the search box clears everything, once it has held text.** Emptying the box wipes all
   destination fields, so a cleared search can never leave the previous address behind. A box the
   participant has not typed into does not count as cleared: on a form that opened with an address
