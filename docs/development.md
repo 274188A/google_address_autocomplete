@@ -133,6 +133,19 @@ write into set A's fields. A fixed `#locationField` was exactly that bug.
 The prefix uses the **configured** position of the set, not its position among the sets that
 qualified on the current page, so a set's ids stay stable however the others are scoped.
 
+### The search box is detached from REDCap's form
+
+`<gmp-place-autocomplete>` is a form-associated custom element, and its `name` is `null` rather
+than the `""` every native control reports. Placed inside REDCap's data-entry form it is listed in
+`form.elements`, and REDCap code that walks those elements assuming a string `name` throws:
+`copySurveyAdmission()` in `FileFields.js` did, and the **Upload file** button on the same
+instrument stopped opening its pop-up (fixed in 1.0.7). `initWithNewApi()` therefore gives the
+widget a `form` attribute naming an id that does not exist (`<prefix>no-form`). That removes it
+from the form's elements and from submission without moving it on the page; the address still
+reaches the record through the hidden source field and the destination fields. Do not drop the
+attribute, and do not set a `name` on the widget instead: that would submit its value as an
+unknown field.
+
 ### Destination fields load disabled unless pre-populated
 
 Destination fields are `disabled` on load **only if they arrive empty**

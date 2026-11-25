@@ -17,6 +17,7 @@ you tell two sets apart on the same page.
 | A set works at one event but not another (longitudinal) | The set is scoped to specific **Event(s) this set applies to**. Blank that field to apply it at every event, or add the event you need. |
 | A set stopped appearing after an event was deleted, or after the project was converted to classic | A stored event scope keeps applying even when the dropdown is hidden, so a set pointing at an event that no longer exists matches nothing and is silently not emitted. Clear the set's event scope. |
 | Changes deployed but old behaviour persists | The JavaScript is inlined into the page. Hard-refresh with Ctrl+F5 — see [After deploying a change](installation.md#after-deploying-a-change). |
+| **Upload file** does nothing on an instrument with an address box; the console shows `Cannot read properties of null (reading 'startsWith')` in `FileFields.js` | Fixed in 1.0.7: earlier versions left Google's search box inside REDCap's form, which breaks REDCap's file-upload code. Upgrade the module. See [The search box is detached from REDCap's form](development.md#the-search-box-is-detached-from-redcaps-form). |
 | A new setting doesn't appear in the configuration dialog | REDCap caches `config.json`. Disable the module on the project and re-enable it — see [After deploying a change](installation.md#after-deploying-a-change). |
 
 ## Predictions don't work
