@@ -530,6 +530,10 @@ SCRIPT;
 
 				placeAutocomplete.id = autocompletePrefix + 'autocomplete';
 				placeAutocomplete.setAttribute('placeholder', 'Enter your address here');
+				// The widget is form-associated with a null .name; left in REDCap's form, it makes
+				// FileFields.js copySurveyAdmission() throw and the "Upload file" button dead. A
+				// form id that does not exist detaches it without moving it on the page.
+				placeAutocomplete.setAttribute('form', autocompletePrefix + 'no-form');
 
 				// Without the teardown the widget stays on the form looking usable while
 				// nothing is ever written. A burst is tolerated first, so a momentary denial is

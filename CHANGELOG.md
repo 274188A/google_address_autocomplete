@@ -15,6 +15,22 @@ releasing, rename the deployment directory and tag the commit to match the versi
 
 ---
 
+## [1.0.7] - 2026-11-25
+
+### Fixed
+
+- **The "Upload file" button works again on instruments with an Autocomplete Field.** Google's
+  search box (`<gmp-place-autocomplete>`) is a form-associated custom element whose `name` is
+  `null`, and the module inserted it inside REDCap's data-entry form, so it appeared in
+  `form.elements`. REDCap's `copySurveyAdmission()` (`FileFields.js`) calls
+  `input.name.startsWith(...)` on every form element when a file upload pop-up opens, and threw
+  `Cannot read properties of null (reading 'startsWith')`, so the pop-up never opened. The search
+  box now carries a `form` attribute pointing at an id that does not exist, which detaches it from
+  the form without moving it on the page: it is no longer listed in or submitted with the form. The
+  address is still written to the mapped REDCap fields as before.
+
+---
+
 ## [1.0.6] - 2026-11-16
 
 ### Changed
@@ -467,6 +483,7 @@ than what changed. Later releases will record changes against this baseline.
   current behaviour rather than fixed, since the same convention is used everywhere the module
   reads a component type.
 
+[1.0.7]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.7
 [1.0.6]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.6
 [1.0.5]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.5
 [1.0.4]: https://github.com/274188A/google_address_autocomplete/releases/tag/v1.0.4
